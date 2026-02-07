@@ -22,16 +22,15 @@ MODULE = test_ntt_mult
 # 2 = MONTGOMERY (Montgomery reduction)
 REDUCTION_TYPE ?= 0
 
-# Pass reduction type as a parameter override
-COMPILE_ARGS += -PREDUCTION_TYPE=$(REDUCTION_TYPE)
-
 # Simulator-specific settings
 ifeq ($(SIM),icarus)
     COMPILE_ARGS += -g2012  # Enable SystemVerilog support
+    COMPILE_ARGS += -PREDUCTION_TYPE=$(REDUCTION_TYPE)  # Parameter override for Icarus
 endif
 
 ifeq ($(SIM),verilator)
     COMPILE_ARGS += --timing  # For SystemVerilog timing constructs
+    COMPILE_ARGS += -GREDUCTION_TYPE=$(REDUCTION_TYPE)  # Parameter override for Verilator
     EXTRA_ARGS += --trace --trace-structs
 endif
 

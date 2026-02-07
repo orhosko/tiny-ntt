@@ -49,7 +49,7 @@ module montgomery_reduction #(
     
     // Step 2: t = (product + m * q) >> k
     assign t_temp = product + (m * Q);
-    assign t = t_temp >> K;  // Divide by R = 2^k
+    assign t = t_temp[K +: 32];  // Extract 32 bits starting at bit K (divide by R = 2^k)
     
     // Step 3: Correction (if t >= q, subtract q)
     assign result = (t >= Q) ? (t - Q) : t;

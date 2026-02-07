@@ -40,7 +40,12 @@ module mod_mult #(
     generate
         if (REDUCTION_TYPE == 0) begin : gen_simple
             // Simple modulo operation (for simulation/verification)
-            assign result = mult_result % Q;
+            // Cast to proper widths to avoid Verilator warnings
+            logic [2*WIDTH-1:0] q_extended;
+            logic [2*WIDTH-1:0] mod_temp;
+            assign q_extended = {{WIDTH{1'b0}}, Q};
+            assign mod_temp = mult_result % q_extended;
+            assign result = mod_temp[WIDTH-1:0];
             
         end else if (REDUCTION_TYPE == 1) begin : gen_barrett
             // Barrett reduction

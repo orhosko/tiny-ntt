@@ -31,7 +31,6 @@ module barrett_reduction #(
     // Intermediate values
     logic [PRODUCT_WIDTH-1:0] q1;
     logic [PRODUCT_WIDTH-1:0] q2_temp;
-    logic [31:0] q2;
     logic [PRODUCT_WIDTH-1:0] r_temp;
     logic [31:0] r;
     
@@ -40,7 +39,8 @@ module barrett_reduction #(
     
     // Step 2: q2 = (q1 * μ) >> (k+1)
     assign q2_temp = q1 * MU;
-    assign q2 = q2_temp >> (K + 1);
+    logic [31:0] q2;
+    assign q2 = q2_temp[K+1 +: 32];  // Extract 32 bits starting at bit K+1
     
     // Step 3: r = product - q2 * q
     assign r_temp = product - (q2 * Q);

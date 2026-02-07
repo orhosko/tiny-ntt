@@ -7,12 +7,17 @@ A high-performance SystemVerilog implementation of a Number Theoretic Transform 
 ```
 tiny-ntt/
 ├── rtl/
-│   ├── mod_mult.sv              # Modular multiplier submodule
-│   └── ntt_pointwise_mult.sv    # Top-level NTT multiplication unit
+│   ├── barrett_reduction.sv         # Barrett reduction algorithm
+│   ├── montgomery_reduction.sv      # Montgomery reduction algorithm
+│   ├── mod_mult.sv                  # Configurable modular multiplier
+│   └── ntt_pointwise_mult.sv        # Top-level NTT multiplication unit
+├── scripts/
+│   └── precompute_constants.py      # Compute Barrett/Montgomery constants
 ├── test/
-│   ├── test_ntt_mult.py         # Cocotb testbench
-│   └── Makefile                 # Simulation makefile
-└── README.md                    # This file
+│   ├── test_ntt_mult.py             # Cocotb testbench
+│   └── Makefile                     # Simulation makefile
+├── flake.nix                        # Nix development environment
+└── README.md                        # This file
 ```
 
 ## Getting Started

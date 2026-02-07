@@ -5,12 +5,18 @@
 //==============================================================================
 // Performs parallel pointwise multiplication of two NTT-domain polynomials
 // C[i] = (A[i] * B[i]) mod q for all i in [0, N-1]
+//
+// Supports configurable modular reduction methods via REDUCTION_TYPE parameter:
+//   0: SIMPLE     - Direct modulo (baseline)
+//   1: BARRETT    - Barrett reduction (optimized)
+//   2: MONTGOMERY - Montgomery reduction (fastest for repeated ops)
 //==============================================================================
 
 module ntt_pointwise_mult #(
-    parameter int N = 256,         // Polynomial degree (number of coefficients)
-    parameter int WIDTH = 32,      // Coefficient bit width
-    parameter int Q = 3329         // Modulus (Kyber/Dilithium prime)
+    parameter int N = 256,                 // Polynomial degree (number of coefficients)
+    parameter int WIDTH = 32,              // Coefficient bit width
+    parameter int Q = 3329,                // Modulus (Kyber/Dilithium prime)
+    parameter int REDUCTION_TYPE = 0       // 0=SIMPLE, 1=BARRETT, 2=MONTGOMERY
 ) (
     // Input polynomial A (NTT domain)
     input  logic [WIDTH-1:0] poly_a [N-1:0],
@@ -28,7 +34,8 @@ module ntt_pointwise_mult #(
         for (i = 0; i < N; i++) begin : gen_mult
             mod_mult #(
                 .WIDTH(WIDTH),
-                .Q(Q)
+                .Q(Q),
+                .REDUCTION_TYPE(REDUCTION_TYPE)
             ) mult_inst (
                 .a(poly_a[i]),
                 .b(poly_b[i]),

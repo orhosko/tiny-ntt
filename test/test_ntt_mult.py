@@ -8,6 +8,7 @@ multiplication of two NTT-domain polynomials.
 import cocotb
 from cocotb.triggers import Timer
 import random
+import os
 
 # Design parameters
 N = 256       # Polynomial degree
@@ -34,6 +35,12 @@ def get_polynomial(dut_array, n):
 @cocotb.test()
 async def test_basic_multiplication(dut):
     """Test basic multiplication with known values"""
+    
+    # Log reduction type (from compilation)
+    reduction_type = os.environ.get('REDUCTION_TYPE', '0')
+    reduction_names = {' 0': 'SIMPLE', '1': 'BARRETT', '2': 'MONTGOMERY'}
+    reduction_name = reduction_names.get(reduction_type, f'UNKNOWN({reduction_type})')
+    dut._log.info(f"Testing with REDUCTION_TYPE={reduction_type} ({reduction_name})")
     dut._log.info("Testing basic multiplication with known values")
     
     # Test case 1: Multiply by 1 (identity)

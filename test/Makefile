@@ -5,6 +5,8 @@ SIM ?= icarus
 TOPLEVEL_LANG ?= verilog
 
 # RTL source files
+VERILOG_SOURCES += $(PWD)/../rtl/barrett_reduction.sv
+VERILOG_SOURCES += $(PWD)/../rtl/montgomery_reduction.sv
 VERILOG_SOURCES += $(PWD)/../rtl/mod_mult.sv
 VERILOG_SOURCES += $(PWD)/../rtl/ntt_pointwise_mult.sv
 
@@ -13,6 +15,15 @@ TOPLEVEL = ntt_pointwise_mult
 
 # Python test module
 MODULE = test_ntt_mult
+
+# Reduction method selection
+# 0 = SIMPLE (direct modulo)
+# 1 = BARRETT (Barrett reduction)
+# 2 = MONTGOMERY (Montgomery reduction)
+REDUCTION_TYPE ?= 0
+
+# Pass reduction type as a parameter override
+COMPILE_ARGS += -PREDUCTION_TYPE=$(REDUCTION_TYPE)
 
 # Simulator-specific settings
 ifeq ($(SIM),icarus)
@@ -26,6 +37,39 @@ endif
 
 # Include cocotb's make rules
 include $(shell cocotb-config --makefiles)/Makefile.sim
+
+# Test all reduction methods
+.PHONY: test-all test-simple test-barrett test-montgomery
+
+test-all: test-simple test-barrett test-montgomery
+	@echo ""
+	@echo "======================================================================"
+	@echo " All reduction methods tested successfully!"
+	@echo "======================================================================"
+
+test-simple:
+	@echo ""
+	@echo "======================================================================"
+	@echo " Testing with SIMPLE reduction (REDUCTION_TYPE=0)"
+	@echo "======================================================================"
+	$(MAKE) clean
+	$(MAKE) REDUCTION_TYPE=0
+
+test-barrett:
+	@echo ""
+	@echo "======================================================================"
+	@echo " Testing with BARRETT reduction (REDUCTION_TYPE=1)"
+	@echo "======================================================================"
+	$(MAKE) clean
+	$(MAKE) REDUCTION_TYPE=1
+
+test-montgomery:
+	@echo ""
+	@echo "======================================================================"
+	@echo " Testing with MONTGOMERY reduction (REDUCTION_TYPE=2)"
+	@echo "======================================================================"
+	$(MAKE) clean
+	$(MAKE) REDUCTION_TYPE=2
 
 # Clean target
 clean::

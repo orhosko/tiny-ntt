@@ -1,74 +1,40 @@
-# Makefile for cocotb simulation of NTT Pointwise Multiplication Unit
+# Makefile for cocotb-based NTT multiplication testbench
 
-# Simulation settings
+# Simulator selection
 SIM ?= icarus
-TOPLEVEL_LANG ?= verilog
 
-# RTL source files
-VERILOG_SOURCES += $(PWD)/../rtl/barrett_reduction.sv
-VERILOG_SOURCES += $(PWD)/../rtl/montgomery_reduction.sv
-VERILOG_SOURCES += $(PWD)/../rtl/mod_mult.sv
-VERILOG_SOURCES += $(PWD)/../rtl/ntt_pointwise_mult.sv
+# Testbench module
+COCOTB_TEST_MODULES = test_ntt_mult
 
 # Top-level module
 TOPLEVEL = ntt_pointwise_mult
 
-# Python test module
-MODULE = test_ntt_mult
+# Verilog sources - relative paths from test directory
+VERILOG_SOURCES = \
+	$(PWD)/../rtl/barrett_reduction.sv \
+	$(PWD)/../rtl/montgomery_reduction.sv \
+	$(PWD)/../rtl/mod_mult.sv \
+	$(PWD)/../rtl/ntt_pointwise_mult.sv
 
-# Reduction method selection
-# 0 = SIMPLE (direct modulo)
-# 1 = BARRETT (Barrett reduction)
-# 2 = MONTGOMERY (Montgomery reduction)
-REDUCTION_TYPE ?= 0
+# Language
+TOPLEVEL_LANG = verilog
 
-# Simulator-specific settings
+# Enable waveform dumping for all simulators
+WAVES ?= 1
+export WAVES
+
 ifeq ($(SIM),icarus)
     COMPILE_ARGS += -g2012  # Enable SystemVerilog support
-    COMPILE_ARGS += -PREDUCTION_TYPE=$(REDUCTION_TYPE)  # Parameter override for Icarus
 endif
 
 ifeq ($(SIM),verilator)
-    COMPILE_ARGS += --timing  # For SystemVerilog timing constructs
-    COMPILE_ARGS += -GREDUCTION_TYPE=$(REDUCTION_TYPE)  # Parameter override for Verilator
-    EXTRA_ARGS += --trace --trace-structs
+    COMPILE_ARGS += --timing
+    COMPILE_ARGS += --trace
+    COMPILE_ARGS += --trace-structs
 endif
 
-# Include cocotb's make rules
+# Include cocotb makefiles
 include $(shell cocotb-config --makefiles)/Makefile.sim
-
-# Test all reduction methods
-.PHONY: test-all test-simple test-barrett test-montgomery
-
-test-all: test-simple test-barrett test-montgomery
-	@echo ""
-	@echo "======================================================================"
-	@echo " All reduction methods tested successfully!"
-	@echo "======================================================================"
-
-test-simple:
-	@echo ""
-	@echo "======================================================================"
-	@echo " Testing with SIMPLE reduction (REDUCTION_TYPE=0)"
-	@echo "======================================================================"
-	$(MAKE) clean
-	$(MAKE) REDUCTION_TYPE=0
-
-test-barrett:
-	@echo ""
-	@echo "======================================================================"
-	@echo " Testing with BARRETT reduction (REDUCTION_TYPE=1)"
-	@echo "======================================================================"
-	$(MAKE) clean
-	$(MAKE) REDUCTION_TYPE=1
-
-test-montgomery:
-	@echo ""
-	@echo "======================================================================"
-	@echo " Testing with MONTGOMERY reduction (REDUCTION_TYPE=2)"
-	@echo "======================================================================"
-	$(MAKE) clean
-	$(MAKE) REDUCTION_TYPE=2
 
 # Clean target
 clean::

@@ -6,30 +6,15 @@ This directory contains scripts for synthesizing the NTT multiplication unit wit
 
 ```bash
 cd synth
-make synth-all    # Synthesize all three reduction methods
-```
-
-## Individual Synthesis
-
-```bash
-make synth-simple      # REDUCTION_TYPE=0 (SIMPLE)
-make synth-barrett     # REDUCTION_TYPE=1 (BARRETT)
-make synth-montgomery  # REDUCTION_TYPE=2 (MONTGOMERY)
-```
-
-## View Results
-
-```bash
-make report  # Display synthesis statistics comparison
+make       # Synthesize design
+make clean # Clean outputs
 ```
 
 ## Output Files
 
-- `synth_simple.log` - Full synthesis log for SIMPLE reduction
-- `synth_barrett.log` - Full synthesis log for BARRETT reduction
-- `synth_montgomery.log` - Full synthesis log for MONTGOMERY reduction
-- `synth_output.v` - Synthesized Verilog netlist (last run)
-- `synth_output.json` - JSON representation (last run)
+- `synth.log` - Full synthesis log with statistics
+- `synth_output.v` - Synthesized Verilog netlist
+- `synth_output.json` - JSON representation
 
 ## Understanding the Report
 
@@ -38,32 +23,14 @@ The synthesis report shows:
 - **Cell breakdown**: Types of cells (AND, OR, MUX, ADD, MUL, etc.)
 - **Wires**: Number of internal connections
 
-### Key Metrics to Compare
+### Key Metrics
 
-1. **Multipliers** - Number of multiplication units
-2. **Adders** - Addition/subtraction logic
-3. **Total cells** - Overall resource usage
+- **Multipliers** - Number of multiplication units
+- **Adders** - Addition/subtraction logic
+- **Total cells** - Overall resource usage
 
-Expected differences:
-- **SIMPLE**: Uses modulo operator (may synthesize inefficiently)
-- **BARRETT**: More adders/shifts, fewer special operations
+### Expected Differences
+
+- **SIMPLE**: May synthesize less efficiently (depends on tool)
+- **BARRETT**: More adders/shifts, explicit algorithm
 - **MONTGOMERY**: Similar to Barrett, optimized for repeated ops
-
-## Synthesis for Specific FPGA
-
-To target a specific FPGA family (e.g., Xilinx, Intel):
-
-```bash
-# Edit synth.ys and replace 'techmap' with FPGA-specific synth command
-# For Xilinx:
-yosys -p "synth_xilinx -top ntt_pointwise_mult" ...
-
-# For Intel/Altera:
-yosys -p "synth_intel -top ntt_pointwise_mult" ...
-```
-
-## Clean
-
-```bash
-make clean  # Remove all synthesis outputs and logs
-```

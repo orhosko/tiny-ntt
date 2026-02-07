@@ -5,7 +5,6 @@
 //==============================================================================
 // Computes (a * b) mod q where q is a configurable modulus
 // Uses simple modulo operation for initial implementation
-// Can be upgraded to Barrett/Montgomery reduction for better performance
 //==============================================================================
 
 module mod_mult #(
@@ -19,11 +18,15 @@ module mod_mult #(
 
     // Intermediate 64-bit multiplication result
     logic [2*WIDTH-1:0] mult_result;
+    logic [2*WIDTH-1:0] mod_result;
     
     // Perform multiplication
     assign mult_result = a * b;
     
-    // Perform modular reduction
-    assign result = mult_result % Q;
+    // Perform modular reduction with proper width casting
+    assign mod_result = mult_result % (2*WIDTH)'(Q);
+    
+    // Truncate to output width
+    assign result = mod_result[WIDTH-1:0];
 
 endmodule

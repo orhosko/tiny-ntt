@@ -47,9 +47,9 @@ module mod_mult #(
       assign mod_temp = mult_result % q_extended;
       assign result = mod_temp[WIDTH-1:0];
 
-      initial begin
-        $display("mod_mult: Using SIMPLE reduction (REDUCTION_TYPE=%0d)", REDUCTION_TYPE);
-      end
+      // initial begin
+      //   $display("mod_mult: Using SIMPLE reduction (REDUCTION_TYPE=%0d)", REDUCTION_TYPE);
+      // end
 
     end else if (REDUCTION_TYPE == 1) begin : gen_barrett
       // Barrett reduction
@@ -67,9 +67,9 @@ module mod_mult #(
 
       assign result = barrett_out;
 
-      initial begin
-        $display("mod_mult: Using BARRETT reduction (REDUCTION_TYPE=%0d)", REDUCTION_TYPE);
-      end
+      // initial begin
+      //   $display("mod_mult: Using BARRETT reduction (REDUCTION_TYPE=%0d)", REDUCTION_TYPE);
+      // end
 
     end else if (REDUCTION_TYPE == 2) begin : gen_montgomery
       // Montgomery reduction
@@ -88,9 +88,9 @@ module mod_mult #(
 
       assign result = mont_out;
 
-      initial begin
-        $display("mod_mult: Using MONTGOMERY reduction (REDUCTION_TYPE=%0d)", REDUCTION_TYPE);
-      end
+      // initial begin
+      //   $display("mod_mult: Using MONTGOMERY reduction (REDUCTION_TYPE=%0d)", REDUCTION_TYPE);
+      // end
 
     end else begin : gen_error
       // Invalid reduction type

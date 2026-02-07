@@ -17,6 +17,7 @@
         pythonEnv = python.withPackages (ps: with ps; [
           cocotb
           cocotb-bus
+          pytest
         ]);
       in
       {

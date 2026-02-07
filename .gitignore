@@ -1,9 +1,13 @@
 # Python
-**/__pycache__/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 
-# Test
-test/sim_build/
-test/results.xml
+# Cocotb simulation outputs
+sim_build/
+results.xml
 
 # Waveform files
 *.vcd
@@ -15,6 +19,12 @@ test/results.xml
 # Compiled Verilog
 *.vvp
 *.out
+
+# Synthesis outputs
+synth/*.log
+synth/synth_output.v
+synth/synth_output.json
+synth/*.dot
 
 # Editor/IDE
 .vscode/

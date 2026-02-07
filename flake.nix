@@ -24,11 +24,12 @@
           buildInputs = [
             pythonEnv
             pkgs.iverilog         # Icarus Verilog
-            pkgs.gtkwave         # Waveform viewer (optional but useful)
+            pkgs.gtkwave          # Waveform viewer (optional but useful)
             
             # Additional useful tools
-            pkgs.verilator       # Alternative simulator
-            pkgs.gnumake         # For running Makefile
+            pkgs.verilator        # Alternative simulator
+            pkgs.gnumake          # For running Makefile
+            pkgs.yosys            # Synthesis tool
           ];
 
           shellHook = ''
@@ -38,10 +39,14 @@
             echo "  • Python ${python.version} with cocotb"
             echo "  • Icarus Verilog: $(iverilog -V 2>&1 | head -n1)"
             echo "  • Verilator: $(verilator --version | head -n1)"
+            echo "  • Yosys: $(yosys -V | head -n1)"
             echo "  • GTKWave for waveform viewing"
             echo ""
             echo "To run tests:"
             echo "  cd test && make"
+            echo ""
+            echo "To synthesize:"
+            echo "  cd synth && make synth-all"
             echo ""
             echo "To view waveforms:"
             echo "  gtkwave test/*.vcd"

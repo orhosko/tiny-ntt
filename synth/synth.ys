@@ -1,0 +1,28 @@
+# Yosys synthesis script for NTT Pointwise Multiplication Unit
+# This script contains only the synthesis flow steps
+# File reading and parameter setting should be done BEFORE running this script
+
+# Note: Assumes files are already read and parameter is already set
+# Expected usage: yosys -p "read files; chparam; script synth.ys"
+
+# Set top module and check hierarchy
+hierarchy -top ntt_pointwise_mult_synth -check
+
+# Translate processes (converts 'always' blocks to logic)
+proc
+
+# Optimize
+opt
+
+# Technology mapping for generic gates
+techmap
+
+# Optimize again after mapping
+opt
+
+# Print statistics
+stat
+
+# Write synthesis output
+write_verilog -noattr -noexpr synth_output.v
+write_json synth_output.json

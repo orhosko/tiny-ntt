@@ -13,6 +13,9 @@ tiny-ntt/
 │   └── ntt_pointwise_mult.sv        # Top-level NTT multiplication unit
 ├── scripts/
 │   └── precompute_constants.py      # Compute Barrett/Montgomery constants
+├── synth/
+│   ├── synth.ys                     # Yosys synthesis script
+│   └── Makefile                     # Synthesis makefile
 ├── test/
 │   ├── test_ntt_mult.py             # Cocotb testbench
 │   └── Makefile                     # Simulation makefile

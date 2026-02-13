@@ -19,11 +19,11 @@
 //==============================================================================
 
 module ntt_forward #(
-    parameter int N              = 256,   // NTT size
-    parameter int WIDTH          = 32,    // Data width
-    parameter int Q              = 3329,  // Modulus
-    parameter int ADDR_WIDTH     = 8,     // log₂(N)
-    parameter int REDUCTION_TYPE = 0      // 0=Simple, 1=Barrett, 2=Montgomery
+    parameter int N              = 256,      // NTT size
+    parameter int WIDTH          = 32,       // Data width
+    parameter int Q              = 8380417,  // Modulus
+    parameter int ADDR_WIDTH     = 8,        // log₂(N)
+    parameter int REDUCTION_TYPE = 0         // 0=Simple, 1=Barrett, 2=Montgomery
 ) (
     input logic clk,
     input logic rst_n,

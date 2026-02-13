@@ -14,18 +14,17 @@
 // Note: This assumes inputs are already in Montgomery domain.
 // For standalone use: convert inputs with a_M = (a * R) mod q first.
 //
-// Precomputed constants (for q = 3329):
-//   k = 13 (R = 2^13 = 8192, next power of 2 above q)
-//   R = 8192
-//   q' = -q^-1 mod R = 7039
-//   R mod q = 1534 (used for domain conversion)
-//   R^-1 mod q = 3186 (used for domain conversion back)
+// Precomputed constants (for q = 8380417):
+//   k = 23 (R = 2^23 = 8388608, next power of 2 above q)
+//   R = 8388608
+//   q' = -q^-1 mod R = 8380415
+//   R mod q = 8191 (used for domain conversion)
 //==============================================================================
 
 module montgomery_reduction #(
-    parameter int Q = 3329,           // Modulus
-    parameter int K = 13,             // Bit width of R (R = 2^k)
-    parameter int Q_PRIME = 7039,     // -q^-1 mod R
+    parameter int Q = 8380417,           // Modulus
+    parameter int K = 23,                // Bit width of R (R = 2^k)
+    parameter int Q_PRIME = 8380415,     // -q^-1 mod R
     parameter int PRODUCT_WIDTH = 64  // Input product width
 ) (
     input  logic [PRODUCT_WIDTH-1:0] product,  // Input: T (in Montgomery domain)

@@ -13,15 +13,15 @@
 //   3. r = product - q2 * q
 //   4. if (r >= q) r = r - q  (correction step)
 //
-// Precomputed constants (for q = 3329):
-//   k = 12 (bit width of q)
-//   μ = floor(2^(2k) / q) = floor(2^24 / 3329) = 5039
+// Precomputed constants (for q = 8380417):
+//   k = 23 (bit width of q)
+//   μ = floor(2^(2k) / q) = floor(2^46 / 8380417) = 8396807
 //==============================================================================
 
 module barrett_reduction #(
-    parameter int Q = 3329,           // Modulus
-    parameter int K = 12,             // Bit width (2^(k-1) < q < 2^k)
-    parameter int MU = 5039,          // floor(2^(2k) / q)
+    parameter int Q = 8380417,           // Modulus
+    parameter int K = 23,                // Bit width (2^(k-1) < q < 2^k)
+    parameter int MU = 8396807,          // floor(2^(2k) / q)
     parameter int PRODUCT_WIDTH = 64  // Input product width
 ) (
     input  logic [PRODUCT_WIDTH-1:0] product,  // Input: a * b

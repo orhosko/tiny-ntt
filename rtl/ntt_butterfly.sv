@@ -15,9 +15,9 @@
 //==============================================================================
 
 module ntt_butterfly #(
-    parameter int WIDTH          = 32,    // Coefficient bit width
-    parameter int Q              = 3329,  // Modulus (Kyber/Dilithium prime)
-    parameter int REDUCTION_TYPE = 0      // 0=SIMPLE, 1=BARRETT, 2=MONTGOMERY
+    parameter int WIDTH          = 32,       // Coefficient bit width
+    parameter int Q              = 8380417,  // Modulus (Kyber/Dilithium prime)
+    parameter int REDUCTION_TYPE = 0         // 0=SIMPLE, 1=BARRETT, 2=MONTGOMERY
 ) (
     // Inputs
     input logic [WIDTH-1:0] a,       // First input coefficient

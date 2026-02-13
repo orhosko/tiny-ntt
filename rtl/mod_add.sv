@@ -9,7 +9,7 @@
 
 module mod_add #(
     parameter int WIDTH = 32,   // Coefficient bit width
-    parameter int Q     = 3329  // Modulus (Kyber/Dilithium prime)
+    parameter int Q     = 8380417  // Modulus (Dilithium prime)
 ) (
     input  logic [WIDTH-1:0] a,      // First operand
     input  logic [WIDTH-1:0] b,      // Second operand

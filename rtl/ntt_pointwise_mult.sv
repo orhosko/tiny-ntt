@@ -15,7 +15,7 @@
 module ntt_pointwise_mult #(
     parameter int N              = 256,   // Polynomial degree (number of coefficients)
     parameter int WIDTH          = 32,    // Coefficient bit width
-    parameter int Q              = 3329,  // Modulus (Kyber/Dilithium prime)
+    parameter int Q              = 8380417,  // Modulus (Dilithium prime)
     parameter int REDUCTION_TYPE = 1      // 0=SIMPLE, 1=BARRETT, 2=MONTGOMERY
 ) (
     // Input polynomial A (NTT domain)

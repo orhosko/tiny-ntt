@@ -10,7 +10,7 @@
 
 module mod_sub #(
     parameter int WIDTH = 32,   // Coefficient bit width
-    parameter int Q     = 3329  // Modulus (Kyber/Dilithium prime)
+    parameter int Q     = 8380417  // Modulus (Dilithium prime)
 ) (
     input  logic [WIDTH-1:0] a,      // Minuend
     input  logic [WIDTH-1:0] b,      // Subtrahend

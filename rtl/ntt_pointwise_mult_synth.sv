@@ -10,7 +10,7 @@
 module ntt_pointwise_mult_synth #(
     parameter int N = 256,                 // Polynomial degree
     parameter int WIDTH = 32,              // Coefficient bit width
-    parameter int Q = 3329,                // Modulus
+    parameter int Q = 8380417,                // Modulus
     parameter int REDUCTION_TYPE = 0       // 0=SIMPLE, 1=BARRETT, 2=MONTGOMERY
 ) (
     // Flattened inputs (packed arrays - Yosys compatible)

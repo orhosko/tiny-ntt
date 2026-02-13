@@ -12,18 +12,18 @@
 //==============================================================================
 
 module mod_mult #(
-    parameter int WIDTH          = 32,    // Coefficient bit width
-    parameter int Q              = 3329,  // Modulus (Kyber/Dilithium prime)
-    parameter int REDUCTION_TYPE = 0,     // 0=SIMPLE, 1=BARRETT, 2=MONTGOMERY
+    parameter int WIDTH = 32,         // Coefficient bit width
+    parameter int Q = 8380417,        // Modulus (Kyber/Dilithium prime)
+    parameter int REDUCTION_TYPE = 0, // 0=SIMPLE, 1=BARRETT, 2=MONTGOMERY
 
-    // Barrett reduction constants (q = 3329)
-    parameter int K_BARRETT = 12,   // Bit width
-    parameter int MU        = 5039, // floor(2^24 / 3329)
+    // Barrett reduction constants (q = 8380417)
+    parameter int K_BARRETT = 23,     // Bit width
+    parameter int MU = 8396807,       // floor(2^46 / 8380417)
 
-    // Montgomery reduction constants (q = 3329)
-    parameter int K_MONTGOMERY = 13,    // R = 2^13 = 8192
-    parameter int Q_PRIME      = 7039,  // -q^-1 mod R
-    parameter int R_MOD_Q      = 1534   // R mod q (for conversion)
+    // Montgomery reduction constants (q = 8380417)
+    parameter int K_MONTGOMERY = 23,  // R = 2^23 = 8388608
+    parameter int Q_PRIME = 8380415,  // -q^-1 mod R
+    parameter int R_MOD_Q = 8191      // R mod q (for conversion)
 ) (
     input  logic [WIDTH-1:0] a,      // First operand
     input  logic [WIDTH-1:0] b,      // Second operand

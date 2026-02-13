@@ -9,7 +9,7 @@ import random
 
 # Test parameters
 WIDTH = 32
-Q = 3329  # Kyber/Dilithium prime
+Q = 8380417
 
 def mod_add_reference(a, b, q=Q):
     """Python reference implementation of modular addition"""
@@ -30,7 +30,7 @@ async def test_basic_addition(dut):
         (Q-1, 1, 0),        # Wraparound
         (Q-1, Q-1, Q-2),    # Double max
         (1000, 2000, 3000), # Larger values
-        (2000, 2000, 671),  # Sum > Q
+        (2000, 2000, mod_add_reference(2000, 2000)),  # Sum > Q
     ]
     
     for a, b, expected in test_cases:

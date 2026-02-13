@@ -13,7 +13,7 @@ import os
 # Design parameters
 N = 256       # Polynomial degree
 WIDTH = 32    # Coefficient width
-Q = 3329      # Modulus (Kyber/Dilithium prime)
+Q = 8380417
 
 
 def python_mod_mult(a, b, q=Q):

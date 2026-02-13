@@ -8,12 +8,41 @@ from cocotb.triggers import Timer
 
 # Test parameters
 N = 256
-Q = 3329
-OMEGA = 17
+Q = 8380417
+PSI = 1239911
 
-def compute_twiddle(k, omega=OMEGA, q=Q):
-    """Compute ω^k mod q"""
-    return pow(omega, k, q)
+
+def bit_reverse_order(n):
+    width = n.bit_length() - 1
+    reversed_indices = []
+    for i in range(n):
+        binary = bin(i)[2:].zfill(width)
+        reversed_indices.append(int(binary[::-1], 2))
+    return reversed_indices
+
+
+def build_twiddle_rom(n=N, q=Q, psi=PSI):
+    brv = bit_reverse_order(n)
+    twiddles = []
+    exponents = []
+    t = 1
+    while t <= n // 2:
+        for k in range(t):
+            p = brv[t + k]
+            twiddles.append(pow(psi, p, q))
+            exponents.append(p)
+        t *= 2
+    return twiddles, exponents
+
+
+TWIDDLE_ROM, TWIDDLE_EXPONENTS = build_twiddle_rom()
+TWIDDLE_COUNT = len(TWIDDLE_ROM)
+
+
+def compute_twiddle(addr):
+    """Lookup twiddle in ROM layout."""
+    return TWIDDLE_ROM[addr]
+
 
 @cocotb.test()
 async def test_basic_twiddles(dut):
@@ -34,38 +63,40 @@ async def test_basic_twiddles(dut):
     dut._log.info(f"✓ First 10 twiddle factors correct")
 
 @cocotb.test()
-async def test_identity_twiddle(dut):
-    """Test that twiddle[0] = 1 (ω^0 = 1)"""
-    dut._log.info("Testing identity twiddle (ω^0)")
+async def test_first_twiddle(dut):
+    """Test that twiddle[0] matches ROM layout"""
+    dut._log.info("Testing twiddle[0] matches ROM layout")
     
     dut.addr.value = 0
     await Timer(1, unit='ns')
     
     result = int(dut.twiddle.value)
-    assert result == 1, f"Twiddle[0] should be 1, got {result}"
+    expected = compute_twiddle(0)
+    assert result == expected, f"Twiddle[0] should be {expected}, got {result}"
     
-    dut._log.info("✓ Identity twiddle correct")
+    dut._log.info("✓ Twiddle[0] correct")
 
 @cocotb.test()
-async def test_omega_value(dut):
-    """Test that twiddle[1] = ω"""
-    dut._log.info("Testing ω value (twiddle[1])")
+async def test_second_twiddle(dut):
+    """Test that twiddle[1] matches ROM layout"""
+    dut._log.info("Testing twiddle[1] matches ROM layout")
     
     dut.addr.value = 1
     await Timer(1, unit='ns')
     
     result = int(dut.twiddle.value)
-    assert result == OMEGA, f"Twiddle[1] should be {OMEGA}, got {result}"
+    expected = compute_twiddle(1)
+    assert result == expected, f"Twiddle[1] should be {expected}, got {result}"
     
-    dut._log.info(f"✓ ω = {result}")
+    dut._log.info("✓ Twiddle[1] correct")
 
 @cocotb.test()
 async def test_all_twiddles(dut):
-    """Test all 256 twiddle factors"""
-    dut._log.info("Testing all 256 twiddle factors")
+    """Test all twiddle factors in ROM"""
+    dut._log.info("Testing all twiddle factors")
     
     errors = []
-    for k in range(N):
+    for k in range(TWIDDLE_COUNT):
         dut.addr.value = k
         await Timer(1, unit='ns')
         
@@ -76,10 +107,10 @@ async def test_all_twiddles(dut):
             errors.append(f"Twiddle[{k}]: got {result}, expected {expected}")
         
         if (k + 1) % 64 == 0:
-            dut._log.info(f"  Verified {k+1}/256 twiddles")
+            dut._log.info(f"  Verified {k+1}/{TWIDDLE_COUNT} twiddles")
     
     assert len(errors) == 0, f"Twiddle mismatches:\n" + "\n".join(errors[:10])
-    dut._log.info(f"✓ All {N} twiddle factors correct")
+    dut._log.info(f"✓ All {TWIDDLE_COUNT} twiddle factors correct")
 
 @cocotb.test()
 async def test_powers_of_two(dut):
@@ -97,41 +128,43 @@ async def test_powers_of_two(dut):
         
         assert result == expected, \
             f"Twiddle[{k}] mismatch: got {result}, expected {expected}"
-        dut._log.info(f"  ω^{k} = {result}")
+        dut._log.info(f"  Twiddle[{k}] = {result}")
     
     dut._log.info("✓ Power-of-2 twiddles correct")
 
 @cocotb.test()
 async def test_half_point(dut):
-    """Test twiddle at N/2 = 128"""
-    dut._log.info("Testing twiddle at half-point (128)")
+    """Test twiddle near the midpoint of the ROM"""
+    dut._log.info("Testing twiddle near midpoint")
     
-    dut.addr.value = 128
+    midpoint = TWIDDLE_COUNT // 2
+    dut.addr.value = midpoint
     await Timer(1, unit='ns')
     
     result = int(dut.twiddle.value)
-    expected = compute_twiddle(128)
+    expected = compute_twiddle(midpoint)
     
-    dut._log.info(f"  ω^128 = {result}")
+    dut._log.info(f"  Twiddle[{midpoint}] = {result}")
     assert result == expected, \
-        f"Twiddle[128] mismatch: got {result}, expected {expected}"
+        f"Twiddle[{midpoint}] mismatch: got {result}, expected {expected}"
     
-    dut._log.info("✓ Half-point twiddle correct")
+    dut._log.info("✓ Midpoint twiddle correct")
 
 @cocotb.test()
 async def test_last_twiddle(dut):
-    """Test last twiddle factor (255)"""
-    dut._log.info("Testing last twiddle (255)")
+    """Test last twiddle factor in ROM"""
+    last_index = TWIDDLE_COUNT - 1
+    dut._log.info(f"Testing last twiddle ({last_index})")
     
-    dut.addr.value = 255
+    dut.addr.value = last_index
     await Timer(1, unit='ns')
     
     result = int(dut.twiddle.value)
-    expected = compute_twiddle(255)
+    expected = compute_twiddle(last_index)
     
-    dut._log.info(f"  ω^255 = {result}")
+    dut._log.info(f"  Twiddle[{last_index}] = {result}")
     assert result == expected, \
-        f"Twiddle[255] mismatch: got {result}, expected {expected}"
+        f"Twiddle[{last_index}] mismatch: got {result}, expected {expected}"
     
     dut._log.info("✓ Last twiddle correct")
 
@@ -159,7 +192,7 @@ async def test_random_access(dut):
     
     import random
     random.seed(42)
-    test_indices = random.sample(range(N), 50)
+    test_indices = random.sample(range(TWIDDLE_COUNT), min(50, TWIDDLE_COUNT))
     
     for k in test_indices:
         dut.addr.value = k
@@ -171,38 +204,31 @@ async def test_random_access(dut):
         assert result == expected, \
             f"Random access [{k}]: got {result}, expected {expected}"
     
-    dut._log.info(f"✓ Random access test passed for 50 addresses")
+    dut._log.info(f"✓ Random access test passed for {len(test_indices)} addresses")
 
 @cocotb.test()
 async def test_modular_properties(dut):
     """Verify that twiddles satisfy modular arithmetic properties"""
     dut._log.info("Testing modular properties")
     
-    # Test that ω^256 ≡ 1 (mod 3329) by checking wraparound
-    # Read ω^0 and ω^256 (should wrap if we had more addresses, but ROM has 256 entries)
-    
-    # Test ω^a * ω^b ≡ ω^(a+b) mod 256 for small values
-    test_pairs = [(1, 2), (5, 10), (7, 13)]
-    
-    for a, b in test_pairs:
-        # Read ω^a
-        dut.addr.value = a
+    # Test ψ^p1 * ψ^p2 ≡ ψ^(p1+p2) for ROM exponents
+    test_indices = [(0, 1), (2, 3), (5, 10)]
+
+    for idx_a, idx_b in test_indices:
+        dut.addr.value = idx_a
         await Timer(1, unit='ns')
-        omega_a = int(dut.twiddle.value)
-        
-        # Read ω^b
-        dut.addr.value = b
+        psi_a = int(dut.twiddle.value)
+
+        dut.addr.value = idx_b
         await Timer(1, unit='ns')
-        omega_b = int(dut.twiddle.value)
-        
-        # Read ω^(a+b)
-        dut.addr.value = (a + b) % N
-        await Timer(1, unit='ns')
-        omega_ab = int(dut.twiddle.value)
-        
-        # Check ω^a * ω^b ≡ ω^(a+b) (mod Q)
-        product = (omega_a * omega_b) % Q
-        assert product == omega_ab, \
-            f"Property failed: ω^{a} * ω^{b} = {product}, but ω^{a+b} = {omega_ab}"
+        psi_b = int(dut.twiddle.value)
+
+        exp_a = TWIDDLE_EXPONENTS[idx_a]
+        exp_b = TWIDDLE_EXPONENTS[idx_b]
+        expected = pow(PSI, (exp_a + exp_b) % (2 * N), Q)
+
+        product = (psi_a * psi_b) % Q
+        assert product == expected, \
+            f"Property failed: ψ^{exp_a} * ψ^{exp_b} = {product}, expected {expected}"
     
     dut._log.info("✓ Modular properties verified")

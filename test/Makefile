@@ -4,7 +4,7 @@
 SIM ?= icarus
 
 # Testbench module (will be overridden by test targets)
-COCOTB_TEST_MODULES ?= test_ntt_mult
+COCOTB_TEST_MODULES ?= cocotb_tests.test_ntt_mult
 
 # Top-level module (will be overridden by test targets)
 TOPLEVEL ?= ntt_pointwise_mult
@@ -18,6 +18,8 @@ TOPLEVEL_LANG = verilog
 # Disable waveform dumping by default (enable with WAVES=1 if needed)
 WAVES ?= 0
 export WAVES
+
+export PYTHONPATH := $(PWD):$(PYTHONPATH)
 
 ifeq ($(SIM),icarus)
     COMPILE_ARGS += -g2012  # Enable SystemVerilog support
@@ -59,7 +61,7 @@ test-mod-add: clean
 	@echo " Testing modular adder (mod_add)"
 	@echo "======================================================================"
 	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
-		MODULE=test_mod_add \
+		MODULE=cocotb_tests.test_mod_add \
 		TOPLEVEL=mod_add \
 		VERILOG_SOURCES=$(PWD)/../rtl/mod_add.sv \
 		sim
@@ -71,7 +73,7 @@ test-mod-sub: clean
 	@echo " Testing modular subtractor (mod_sub)"
 	@echo "======================================================================"
 	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
-		MODULE=test_mod_sub \
+		MODULE=cocotb_tests.test_mod_sub \
 		TOPLEVEL=mod_sub \
 		VERILOG_SOURCES=$(PWD)/../rtl/mod_sub.sv \
 		sim
@@ -83,9 +85,21 @@ test-butterfly: clean
 	@echo " Testing NTT butterfly unit"
 	@echo "======================================================================"
 	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
-		MODULE=test_ntt_butterfly \
+		MODULE=cocotb_tests.test_ntt_butterfly \
 		TOPLEVEL=ntt_butterfly \
 		VERILOG_SOURCES="$(PWD)/../rtl/mod_add.sv $(PWD)/../rtl/mod_sub.sv $(PWD)/../rtl/barrett_reduction.sv $(PWD)/../rtl/montgomery_reduction.sv $(PWD)/../rtl/mod_mult.sv $(PWD)/../rtl/ntt_butterfly.sv" \
+		sim
+
+# Test inverse butterfly unit
+test-butterfly-inverse: clean
+	@echo ""
+	@echo "======================================================================"
+	@echo " Testing Inverse NTT Butterfly Unit"
+	@echo "======================================================================"
+	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
+		MODULE=cocotb_tests.test_butterfly_inverse \
+		TOPLEVEL=ntt_butterfly_inverse \
+		VERILOG_SOURCES="$(PWD)/../rtl/mod_add.sv $(PWD)/../rtl/mod_sub.sv $(PWD)/../rtl/barrett_reduction.sv $(PWD)/../rtl/montgomery_reduction.sv $(PWD)/../rtl/mod_mult.sv $(PWD)/../rtl/ntt_butterfly_inverse.sv" \
 		sim
 
 # Test twiddle ROM
@@ -95,7 +109,7 @@ test-twiddle-rom: clean
 	@echo " Testing twiddle factor ROM"
 	@echo "======================================================================"
 	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
-		MODULE=test_twiddle_rom \
+		MODULE=cocotb_tests.test_twiddle_rom \
 		TOPLEVEL=twiddle_rom \
 		VERILOG_SOURCES="$(PWD)/../rtl/twiddle_rom.sv" \
 		sim
@@ -107,7 +121,7 @@ test-coeff-ram: clean
 	@echo " Testing coefficient RAM"
 	@echo "======================================================================"
 	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
-		MODULE=test_coeff_ram \
+		MODULE=cocotb_tests.test_coeff_ram \
 		TOPLEVEL=coeff_ram \
 		VERILOG_SOURCES="$(PWD)/../rtl/coeff_ram.sv" \
 		sim
@@ -119,7 +133,7 @@ test-ntt-mult: clean
 	@echo " Testing NTT pointwise multiplication"
 	@echo "======================================================================"
 	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
-		MODULE=test_ntt_mult \
+		MODULE=cocotb_tests.test_ntt_mult \
 		TOPLEVEL=ntt_pointwise_mult \
 		VERILOG_SOURCES="$(PWD)/../rtl/barrett_reduction.sv $(PWD)/../rtl/montgomery_reduction.sv $(PWD)/../rtl/mod_mult.sv $(PWD)/../rtl/ntt_pointwise_mult.sv" \
 		sim
@@ -131,7 +145,7 @@ test-ntt-control: clean
 	@echo " Testing NTT control FSM"
 	@echo "======================================================================"
 	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
-		MODULE=test_ntt_control \
+		MODULE=cocotb_tests.test_ntt_control \
 		TOPLEVEL=ntt_control \
 		VERILOG_SOURCES="$(PWD)/../rtl/ntt_control.sv" \
 		sim
@@ -143,7 +157,7 @@ test-ntt-forward: clean
 	@echo " Testing NTT Forward Transform (Full Integration)"
 	@echo "======================================================================"
 	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
-		MODULE=test_ntt_forward \
+		MODULE=cocotb_tests.test_ntt_forward \
 		TOPLEVEL=ntt_forward \
 		VERILOG_SOURCES="$(PWD)/../rtl/ntt_forward.sv $(PWD)/../rtl/coeff_ram.sv $(PWD)/../rtl/twiddle_rom.sv $(PWD)/../rtl/ntt_butterfly.sv $(PWD)/../rtl/ntt_control.sv $(PWD)/../rtl/mod_mult.sv $(PWD)/../rtl/mod_add.sv $(PWD)/../rtl/mod_sub.sv $(PWD)/../rtl/barrett_reduction.sv $(PWD)/../rtl/montgomery_reduction.sv" \
 		sim
@@ -173,6 +187,43 @@ test-all: clean
 	@echo "======================================================================"
 	@echo " All tests completed!"
 	@echo "======================================================================"
+
+# Testing NTT Inverse Transform
+test-ntt-inverse: clean
+	@echo ""
+	@echo "======================================================================"
+	@echo " Testing NTT Inverse Transform (INTT)"
+	@echo "======================================================================"
+	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
+		MODULE=cocotb_tests.test_ntt_inverse \
+		TOPLEVEL=ntt_inverse \
+		VERILOG_SOURCES="$(PWD)/../rtl/ntt_inverse.sv $(PWD)/../rtl/coeff_ram.sv $(PWD)/../rtl/inverse_twiddle_rom.sv $(PWD)/../rtl/ntt_butterfly.sv $(PWD)/../rtl/ntt_control.sv $(PWD)/../rtl/mod_mult.sv $(PWD)/../rtl/mod_add.sv $(PWD)/../rtl/mod_sub.sv $(PWD)/../rtl/barrett_reduction.sv $(PWD)/../rtl/montgomery_reduction.sv" \
+		sim
+
+# INTT unit tests with known data
+test-intt-unit: clean
+	@echo ""
+	@echo "======================================================================"
+	@echo " INTT Unit Tests - Known Data"
+	@echo "======================================================================"
+	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
+		MODULE=cocotb_tests.test_intt_unit \
+		TOPLEVEL=ntt_inverse \
+		VERILOG_SOURCES="$(PWD)/../rtl/ntt_inverse.sv $(PWD)/../rtl/coeff_ram.sv $(PWD)/../rtl/inverse_twiddle_rom.sv $(PWD)/../rtl/ntt_butterfly.sv $(PWD)/../rtl/ntt_control.sv $(PWD)/../rtl/mod_mult.sv $(PWD)/../rtl/mod_add.sv $(PWD)/../rtl/mod_sub.sv $(PWD)/../rtl/barrett_reduction.sv $(PWD)/../rtl/montgomery_reduction.sv" \
+		sim
+
+# Test Forward NTT with new parameters (Q=8380417, WIDTH=24)
+test-ntt-forward-new: clean
+	@echo ""
+	@echo "======================================================================"
+	@echo " Testing Forward NTT with Q=8380417, WIDTH=24"
+	@echo "======================================================================"
+	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
+		MODULE=cocotb_tests.test_ntt_forward_new_params \
+		TOPLEVEL=ntt_forward \
+		VERILOG_SOURCES="$(PWD)/../rtl/coeff_ram.sv $(PWD)/../rtl/twiddle_rom.sv $(PWD)/../rtl/barrett_reduction.sv $(PWD)/../rtl/montgomery_reduction.sv $(PWD)/../rtl/mod_mult.sv $(PWD)/../rtl/mod_add.sv $(PWD)/../rtl/mod_sub.sv $(PWD)/../rtl/ntt_butterfly.sv $(PWD)/../rtl/ntt_control.sv $(PWD)/../rtl/ntt_forward.sv" \
+		PLUSARGS="+WIDTH=24 +Q=8380417" \
+		sim
 
 # Clean target
 clean::

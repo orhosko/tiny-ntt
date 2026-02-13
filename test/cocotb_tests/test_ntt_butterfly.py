@@ -1,6 +1,6 @@
 """
 Cocotb testbench for NTT butterfly unit
-Tests Cooley-Tukey radix-2 butterfly: (a', b') = (a + ω·b, a - ω·b) mod q
+Tests Cooley-Tukey radix-2 butterfly: (a', b') = (a + ψ·b, a - ψ·b) mod q
 """
 
 import cocotb
@@ -9,7 +9,8 @@ import random
 
 # Test parameters
 WIDTH = 32
-Q = 3329  # Kyber/Dilithium prime
+Q = 8380417
+PSI = 1239911
 
 def butterfly_reference(a, b, twiddle, q=Q):
     """
@@ -119,7 +120,7 @@ async def test_inverse_butterfly(dut):
     dut._log.info("Testing butterfly reversibility")
     
     # The inverse butterfly with same twiddle should give back original values
-    # If (a', b') = BF(a, b, ω), then (a, b) = BF(a', b', -ω) / 2
+    # If (a', b') = BF(a, b, ψ), then (a, b) = BF(a', b', -ψ) / 2
     # For NTT, we typically use different twiddles for inverse
     
     test_cases = [
@@ -150,16 +151,16 @@ async def test_ntt_twiddle_factors(dut):
     """Test with actual NTT twiddle factors"""
     dut._log.info("Testing with NTT twiddle factors")
     
-    # ω = 17 is primitive 512-th root of unity mod 3329
-    # Common twiddle factors: ω^0, ω^1, ω^2, ..., ω^128
-    omega = 17
+    # ψ is primitive 2N-th root of unity for NWC
+    # Common twiddle factors: ψ^0, ψ^1, ψ^2, ..., ψ^128
+    psi = PSI
     
     test_cases = [
-        (100, 200, pow(omega, 0, Q)),   # ω^0 = 1
-        (100, 200, pow(omega, 1, Q)),   # ω^1 = 17
-        (100, 200, pow(omega, 2, Q)),   # ω^2
-        (100, 200, pow(omega, 64, Q)),  # ω^64
-        (100, 200, pow(omega, 128, Q)), # ω^128
+        (100, 200, pow(psi, 0, Q)),   # ψ^0 = 1
+        (100, 200, pow(psi, 1, Q)),   # ψ^1
+        (100, 200, pow(psi, 2, Q)),   # ψ^2
+        (100, 200, pow(psi, 64, Q)),  # ψ^64
+        (100, 200, pow(psi, 128, Q)), # ψ^128
     ]
     
     for i, (a, b, twiddle) in enumerate(test_cases):

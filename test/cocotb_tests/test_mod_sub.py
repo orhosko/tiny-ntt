@@ -9,7 +9,7 @@ import random
 
 # Test parameters
 WIDTH = 32
-Q = 3329  # Kyber/Dilithium prime
+Q = 8380417
 
 def mod_sub_reference(a, b, q=Q):
     """Python reference implementation of modular subtraction"""
@@ -171,7 +171,7 @@ async def test_boundary_values(dut):
         # Mid-range
         (Q//2, Q//2, 0),    # Half - Half
         (Q//2, 1, Q//2-1),  # Half - 1
-        (1, Q//2, Q//2+2),  # 1 - Half = 1 - 1664 = -1663 = 3329-1663 = 1666
+        (1, Q//2, Q//2+2),  # 1 - half wraps under modulus
     ]
     
     for a, b, expected in test_cases:

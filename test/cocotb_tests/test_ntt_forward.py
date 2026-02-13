@@ -10,13 +10,13 @@ import sys
 import os
 
 # Add test directory to path for imports
-sys.path.insert(0, os.path.dirname(__file__))
-from ntt_reference import ntt_forward_reference
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from refs.ntt_forward_reference import ntt_forward_reference
 
 # NTT parameters
 N = 256
-Q = 3329
-OMEGA = 17
+Q = 8380417
+PSI = 1239911
 
 async def load_coefficients(dut, coeffs):
     """Load coefficients into RAM via load interface"""
@@ -235,7 +235,7 @@ async def test_ntt_simple_vector(dut):
     await load_coefficients(dut, simple)
     
     # Compute reference
-    expected = ntt_forward_reference(simple, N, Q, OMEGA)
+    expected = ntt_forward_reference(simple, N, Q, PSI)
     
     # Run NTT
     cycles = await run_ntt(dut)
@@ -288,7 +288,7 @@ async def test_ntt_reference_comparison(dut):
         await load_coefficients(dut, input_vec)
         
         # Compute reference
-        expected = ntt_forward_reference(input_vec, N, Q, OMEGA)
+        expected = ntt_forward_reference(input_vec, N, Q, PSI)
         
         # Run NTT
         cycles = await run_ntt(dut)
@@ -343,7 +343,7 @@ async def test_ntt_random_polynomials(dut):
         await load_coefficients(dut, random_poly)
         
         # Compute expected NTT using reference
-        expected = ntt_forward_reference(random_poly, N, Q, OMEGA)
+        expected = ntt_forward_reference(random_poly, N, Q, PSI)
         
         # Run NTT
         cycles = await run_ntt(dut)
@@ -399,7 +399,7 @@ async def test_polynomial_multiplication(dut):
     # Test poly1
     dut._log.info("  Computing NTT of polynomial 1...")
     await load_coefficients(dut, poly1)
-    expected1 = ntt_forward_reference(poly1, N, Q, OMEGA)
+    expected1 = ntt_forward_reference(poly1, N, Q, PSI)
     cycles1 = await run_ntt(dut)
     result1 = await read_coefficients(dut)
     
@@ -411,7 +411,7 @@ async def test_polynomial_multiplication(dut):
     # Test poly2
     dut._log.info("  Computing NTT of polynomial 2...")
     await load_coefficients(dut, poly2)
-    expected2 = ntt_forward_reference(poly2, N, Q, OMEGA)
+    expected2 = ntt_forward_reference(poly2, N, Q, PSI)
     cycles2 = await run_ntt(dut)
     result2 = await read_coefficients(dut)
     

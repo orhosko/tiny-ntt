@@ -18,6 +18,7 @@
           cocotb
           cocotb-bus
           pytest
+          numpy
         ]);
       in
       {

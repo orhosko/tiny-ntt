@@ -2,8 +2,7 @@
 Python reference implementation of NTT for testing
 N=256, q=8380417, psi=1239911 (primitive 512-th root of unity)
 
-Based on working fast_ntt_negacyclic_convolution.py
-Uses bit-reversed twiddle indexing for correct NWC NTT
+Based on hardware twiddle addressing (DIT with ψ twiddles)
 """
 
 import numpy as np
@@ -37,43 +36,33 @@ def bit_reverse_order(n):
 
 def ntt_forward_reference(coeffs, N=N, q=Q, psi=PSI):
     """
-    Fast NTT using Cooley-Tukey with ψ-based twiddles
-    
+    Fast NTT using Cooley-Tukey (DIT) with ψ-based twiddles.
+
     Input: Normal Order (NO)
-    Output: Bit-Reversed Order (BO)
-    
-    This matches the working reference implementation.
+    Output: Hardware-order output (matches control twiddle addressing).
     """
     n = len(coeffs)
     if n != N:
         raise ValueError(f"Input must have {N} coefficients, got {n}")
-    
+
     result = np.array(coeffs, dtype=object)
-    brv = bit_reverse_order(N)
-    
-    t = 1          # Number of blocks
-    m = N // 2     # Stride / Block half-size
-    
-    while m >= 1:
-        for k in range(t):
-            # Twiddle factor W = ψ^p using bit-reversed index
-            p = brv[t + k]
-            W = pow(int(psi), int(p), q)
-            
-            # Apply butterfly to the block
-            for j in range(m):
-                idx1 = 2 * m * k + j
-                idx2 = idx1 + m
-                
+
+    m = 2
+    while m <= N:
+        step = N // m
+        half = m // 2
+        for base in range(0, N, m):
+            for j in range(half):
+                w = pow(int(psi), int(j * step), q)
+                idx1 = base + j
+                idx2 = idx1 + half
+
                 u = result[idx1]
-                v = (result[idx2] * W) % q
-                
-                # Cooley-Tukey butterfly
+                v = (result[idx2] * w) % q
+
                 result[idx1] = (u + v) % q
                 result[idx2] = (u - v) % q
-        
-        t *= 2
-        m //= 2
-    
+        m *= 2
+
     return result.astype(np.int64).tolist()
 

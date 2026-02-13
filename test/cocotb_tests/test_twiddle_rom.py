@@ -12,36 +12,12 @@ Q = 8380417
 PSI = 1239911
 
 
-def bit_reverse_order(n):
-    width = n.bit_length() - 1
-    reversed_indices = []
-    for i in range(n):
-        binary = bin(i)[2:].zfill(width)
-        reversed_indices.append(int(binary[::-1], 2))
-    return reversed_indices
+def compute_twiddle(addr, psi=PSI, q=Q):
+    """Compute ψ^addr mod q."""
+    return pow(psi, addr, q)
 
 
-def build_twiddle_rom(n=N, q=Q, psi=PSI):
-    brv = bit_reverse_order(n)
-    twiddles = []
-    exponents = []
-    t = 1
-    while t <= n // 2:
-        for k in range(t):
-            p = brv[t + k]
-            twiddles.append(pow(psi, p, q))
-            exponents.append(p)
-        t *= 2
-    return twiddles, exponents
-
-
-TWIDDLE_ROM, TWIDDLE_EXPONENTS = build_twiddle_rom()
-TWIDDLE_COUNT = len(TWIDDLE_ROM)
-
-
-def compute_twiddle(addr):
-    """Lookup twiddle in ROM layout."""
-    return TWIDDLE_ROM[addr]
+TWIDDLE_COUNT = N
 
 
 @cocotb.test()
@@ -211,7 +187,7 @@ async def test_modular_properties(dut):
     """Verify that twiddles satisfy modular arithmetic properties"""
     dut._log.info("Testing modular properties")
     
-    # Test ψ^p1 * ψ^p2 ≡ ψ^(p1+p2) for ROM exponents
+    # Test ψ^a * ψ^b ≡ ψ^(a+b)
     test_indices = [(0, 1), (2, 3), (5, 10)]
 
     for idx_a, idx_b in test_indices:
@@ -223,12 +199,10 @@ async def test_modular_properties(dut):
         await Timer(1, unit='ns')
         psi_b = int(dut.twiddle.value)
 
-        exp_a = TWIDDLE_EXPONENTS[idx_a]
-        exp_b = TWIDDLE_EXPONENTS[idx_b]
-        expected = pow(PSI, (exp_a + exp_b) % (2 * N), Q)
+        expected = pow(PSI, (idx_a + idx_b) % (2 * N), Q)
 
         product = (psi_a * psi_b) % Q
         assert product == expected, \
-            f"Property failed: ψ^{exp_a} * ψ^{exp_b} = {product}, expected {expected}"
+            f"Property failed: ψ^{idx_a} * ψ^{idx_b} = {product}, expected {expected}"
     
     dut._log.info("✓ Modular properties verified")

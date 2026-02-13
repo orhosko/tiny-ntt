@@ -11,7 +11,6 @@ from refs.ntt_forward_reference import bit_reverse_order, ntt_forward_reference
 N = 256
 Q = 8380417
 PSI = 1239911      # Primitive 2N-th root (ψ^512 ≡ 1, ψ^256 ≡ -1)
-OMEGA = 169688     # ω = ψ² (primitive N-th root)
 
 def mod_exp(base, exp, mod):
     result = 1
@@ -23,25 +22,15 @@ def mod_exp(base, exp, mod):
         base = (base * base) % mod
     return result
 
-def naive_dft(coeffs, N=256, q=3329, omega=17):
-    """Naive DFT - mathematically correct but slow"""
+def naive_dft(coeffs, N=256, q=Q, root=PSI):
+    """Naive DFT with ψ root (slow, reference)."""
     result = [0] * N
     for k in range(N):
         for j in range(N):
-            result[k] = (result[k] + coeffs[j] * mod_exp(omega, (j * k) % N, q)) % q
+            result[k] = (result[k] + coeffs[j] * mod_exp(root, (j * k) % N, q)) % q
     return result
 
-
-def naive_nwc_ntt(coeffs, N=256, q=3329, psi=1):
-    """Naive NWC NTT using psi twiddles (natural order output)."""
-    result = [0] * N
-    for k in range(N):
-        exponent_scale = 2 * k + 1
-        for j in range(N):
-            result[k] = (result[k] + coeffs[j] * mod_exp(psi, exponent_scale * j, q)) % q
-    return result
-
-print("Comparing our NWC NTT against naive NWC reference")
+print("Comparing forward NTT against naive ψ-based DFT")
 print("="*60)
 
 # Test 1: Impulse at position 1
@@ -51,11 +40,11 @@ print(f"\nInput: [0, 1, 0, 0, ...]")
 our_ntt_bo = ntt_forward_reference(test_input, N, Q, PSI)
 bit_reversed = bit_reverse_order(N)
 our_ntt = [our_ntt_bo[bit_reversed[i]] for i in range(N)]
-correct_dft = naive_nwc_ntt(test_input, N, Q, PSI)
+correct_dft = naive_dft(test_input, N, Q, PSI)
 
 print(f"\nFirst 10 values:")
-print(f"Our NTT (NO):     {our_ntt[:10]}")
-print(f"Correct NWC NTT:  {correct_dft[:10]}")
+print(f"Our NTT (NO):    {our_ntt[:10]}")
+print(f"Naive DFT:       {correct_dft[:10]}")
 
 matches = our_ntt == correct_dft
 print(f"\n✓ MATCH: {matches}")

@@ -209,8 +209,8 @@ def test_montgomery_reduction(q, k, R, q_prime, test_cases=5):
 
 
 if __name__ == "__main__":
-    # Default: Kyber/Dilithium prime
-    Q = 3329
+    # Default: NWC modulus for Dilithium
+    Q = 8380417
     
     print("=" * 70)
     print("NTT Modular Reduction Constants Generator")

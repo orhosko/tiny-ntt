@@ -19,7 +19,9 @@
 
 module ntt_control #(
     parameter int N          = 256,  // NTT size
-    parameter int ADDR_WIDTH = 8     // log₂(N)
+    parameter int ADDR_WIDTH = 8,     // log₂(N)
+    parameter bit INVERSE    = 1'b0,  // 0=forward, 1=inverse (GS)
+    parameter bit DIF        = 1'b0   // 0=DIT, 1=DIF forward
 ) (
     input logic clk,
     input logic rst_n,
@@ -83,15 +85,20 @@ module ntt_control #(
   logic [ADDR_WIDTH-1:0] addr0, addr1;
 
   always_comb begin
-    // Calculate block sizes
-    half_block = ADDR_WIDTH'(1 << stage);
-    block_size = ADDR_WIDTH'(1 << (stage + 1));
+    if (DIF) begin
+      half_block = ADDR_WIDTH'(N >> (stage + 1));
+      block_size = ADDR_WIDTH'(N >> stage);
 
-    // Calculate group and position
-    group    = {1'b0, butterfly} >> stage;  // butterfly / 2^stage
-    position = butterfly & (half_block - 1);  // butterfly % 2^stage
+      group    = {1'b0, butterfly} >> (ADDR_WIDTH - stage - 1);
+      position = butterfly & (half_block - 1);
+    end else begin
+      half_block = ADDR_WIDTH'(1 << stage);
+      block_size = ADDR_WIDTH'(1 << (stage + 1));
 
-    // Calculate addresses
+      group    = {1'b0, butterfly} >> stage;  // butterfly / 2^stage
+      position = butterfly & (half_block - 1);  // butterfly % 2^stage
+    end
+
     addr0 = (group * block_size) + position;
     addr1 = addr0 + half_block;
   end
@@ -99,17 +106,35 @@ module ntt_control #(
   //============================================================================
   // Twiddle Address Calculation
   //============================================================================
-  // For stage s and butterfly b:
-  //   twiddle_addr = (b % 2^s) * 2^(log₂N - s - 1)
-  //   This gives bit-reversed twiddle addressing
+  // Forward (CT): twiddle_addr = (b % 2^s) * 2^(log₂N - s - 1)
+  // Inverse (GS): twiddle_addr = bit_reverse(2^(log₂N - s - 1) + (b / 2^s))
 
   logic [ADDR_WIDTH-1:0] twiddle_multiplier;
   logic [ADDR_WIDTH-1:0] twiddle_index;
+  logic [ADDR_WIDTH-1:0] twiddle_input;
+
+  function automatic [ADDR_WIDTH-1:0] bit_reverse(input logic [ADDR_WIDTH-1:0] value);
+    automatic logic [ADDR_WIDTH-1:0] reversed;
+    for (int i = 0; i < ADDR_WIDTH; i++) begin
+      reversed[i] = value[ADDR_WIDTH - 1 - i];
+    end
+    return reversed;
+  endfunction
 
   always_comb begin
     twiddle_multiplier = ADDR_WIDTH'(1 << (ADDR_WIDTH - stage - 1));
-    twiddle_index      = butterfly & (half_block - 1);  // butterfly % 2^stage
-    twiddle_addr       = twiddle_index * twiddle_multiplier;
+    if (INVERSE) begin
+      twiddle_index = group;  // k = butterfly / 2^stage
+      twiddle_input = twiddle_multiplier + twiddle_index;
+      twiddle_addr = bit_reverse(twiddle_input);
+    end else if (DIF) begin
+      twiddle_index = group;  // k = butterfly / (N / 2^(stage+1))
+      twiddle_input = ADDR_WIDTH'(1 << stage) + twiddle_index;
+      twiddle_addr = bit_reverse(twiddle_input);
+    end else begin
+      twiddle_index = butterfly & (half_block - 1);  // butterfly % 2^stage
+      twiddle_addr = twiddle_index * twiddle_multiplier;
+    end
   end
 
   //============================================================================

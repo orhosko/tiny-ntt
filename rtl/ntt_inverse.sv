@@ -76,15 +76,18 @@ module ntt_inverse #(
   // Butterfly signals
   logic [WIDTH-1:0] butterfly_in_a, butterfly_in_b, butterfly_twiddle;
   logic [WIDTH-1:0] butterfly_out_a, butterfly_out_b;
+  logic [WIDTH-1:0] butterfly_sum, butterfly_diff, butterfly_twiddled;
 
   // Pipeline registers for butterfly outputs
   logic [WIDTH-1:0] butterfly_out_a_reg, butterfly_out_b_reg;
   logic                butterfly_valid_reg;
 
   // Scaling logic (needs 9 bits to reach N=256)
+  localparam int SCALE_LATENCY = 1;
   logic [ADDR_WIDTH:0] scale_addr;  // 9 bits: 0-256
   logic [   WIDTH-1:0] scale_result;
   logic                scale_we;
+
 
   //============================================================================
   // State Machine
@@ -108,7 +111,7 @@ module ntt_inverse #(
       end
 
       SCALE: begin
-        if (scale_addr >= N) next_state = DONE_STATE;
+        if (scale_addr >= (N + SCALE_LATENCY)) next_state = DONE_STATE;
       end
 
       DONE_STATE: begin
@@ -133,7 +136,7 @@ module ntt_inverse #(
       scale_addr <= '0;
     end else begin
       if (state == SCALE) begin
-        if (scale_addr < N) scale_addr <= scale_addr + 1;
+        if (scale_addr < (N + SCALE_LATENCY)) scale_addr <= scale_addr + 1;
       end else begin
         scale_addr <= '0;
       end
@@ -147,11 +150,10 @@ module ntt_inverse #(
   // Temporary variables for address computation
   logic [ADDR_WIDTH-1:0] scale_read_addr, scale_write_addr;
 
-  always_comb begin
-    // Extract addresses (avoid part-select in always_comb for Icarus)
-    scale_read_addr  = scale_addr[ADDR_WIDTH-1:0];
-    scale_write_addr = scale_addr_pipe2[ADDR_WIDTH-1:0];
+  assign scale_read_addr = scale_addr[ADDR_WIDTH-1:0];
+  assign scale_write_addr = scale_addr_pipe1[ADDR_WIDTH-1:0] - 1'b1;
 
+  always_comb begin
     if (state == INTT_COMPUTE) begin
       // INTT computation: FSM controls both ports
       ram_addr_a = fsm_addr_a;
@@ -161,14 +163,13 @@ module ntt_inverse #(
       ram_din_a  = butterfly_out_a_reg;
       ram_din_b  = butterfly_out_b_reg;
     end else if (state == SCALE) begin
-      // Scaling: Read coefficient, multiply by N_INV, write back to Port A
-      // Use pipelined address for write to match data flow
-      ram_addr_a = scale_we ? scale_write_addr : scale_read_addr;
-      ram_addr_b = load_coeff ? load_addr : '0;  // Allow loading during scale
-      ram_we_a   = scale_we;
-      ram_we_b   = load_coeff;
-      ram_din_a  = scale_result;
-      ram_din_b  = load_data;
+      // Scaling: Read coefficient, multiply by N_INV, write back using Port B
+      ram_addr_a = scale_read_addr;
+      ram_addr_b = scale_we ? scale_write_addr : (load_coeff ? load_addr : '0);
+      ram_we_a   = 1'b0;
+      ram_we_b   = scale_we || load_coeff;
+      ram_din_a  = '0;
+      ram_din_b  = scale_we ? scale_result : load_data;
     end else begin
       // IDLE or DONE: User interface - use Port A for reads (where data was written)
       ram_addr_a = load_coeff ? '0 : read_addr;  // Read from Port A
@@ -179,6 +180,7 @@ module ntt_inverse #(
       ram_din_b  = load_data;
     end
   end
+
 
   // Read data from Port A (where INTT/scaling wrote results)
   assign read_data = ram_dout_a;
@@ -212,27 +214,32 @@ module ntt_inverse #(
   logic [WIDTH-1:0] scaling_factor;
   assign scaling_factor = N_INV;
 
-  // Pipeline the address to match data flow
-  logic [ADDR_WIDTH:0] scale_addr_pipe1, scale_addr_pipe2;
+  // Pipeline the address/data to match data flow
+  logic [ADDR_WIDTH:0] scale_addr_pipe1;
+  logic [WIDTH-1:0] scale_data_pipe1;
+  logic scale_addr_pipe1_valid;
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       scale_addr_pipe1 <= '0;
-      scale_addr_pipe2 <= '0;
+      scale_data_pipe1 <= '0;
+      scale_addr_pipe1_valid <= 1'b0;
     end else begin
       if (state == SCALE) begin
-        // Pipeline the address through the multiply stages
         scale_addr_pipe1 <= scale_addr;
-        scale_addr_pipe2 <= scale_addr_pipe1;
+        scale_data_pipe1 <= ram_dout_a;
+        scale_addr_pipe1_valid <= 1'b1;
       end else begin
         scale_addr_pipe1 <= '0;
-        scale_addr_pipe2 <= '0;
+        scale_data_pipe1 <= '0;
+        scale_addr_pipe1_valid <= 1'b0;
       end
     end
   end
 
+
   // Write enable: valid when we have data 2 cycles after read
-  assign scale_we = (state == SCALE) && (scale_addr_pipe2 < N);
+  assign scale_we = (state == SCALE) && scale_addr_pipe1_valid && (scale_addr_pipe1 > 0) && (scale_addr_pipe1 <= N);
 
   // Modular multiplication for scaling
   mod_mult #(
@@ -240,7 +247,7 @@ module ntt_inverse #(
       .Q             (Q),
       .REDUCTION_TYPE(REDUCTION_TYPE)
   ) scale_mult (
-      .a     (ram_dout_a),
+      .a     (scale_data_pipe1),
       .b     (scaling_factor),
       .result(scale_result)
   );
@@ -273,24 +280,45 @@ module ntt_inverse #(
       .twiddle(twiddle_factor)
   );
 
-  // Butterfly Unit (Cooley-Tukey - same as forward NTT!)
-  // INTT uses SAME butterfly as forward NTT, but with inverse twiddles
-  ntt_butterfly #(
+  // Butterfly Unit (Gentleman-Sande inverse)
+  // a_out = a + b
+  // b_out = (a - b) * W
+  mod_add #(
+      .WIDTH(WIDTH),
+      .Q(Q)
+  ) u_inv_add (
+      .a     (butterfly_in_a),
+      .b     (butterfly_in_b),
+      .result(butterfly_sum)
+  );
+
+  mod_sub #(
+      .WIDTH(WIDTH),
+      .Q(Q)
+  ) u_inv_sub (
+      .a     (butterfly_in_a),
+      .b     (butterfly_in_b),
+      .result(butterfly_diff)
+  );
+
+  mod_mult #(
       .WIDTH         (WIDTH),
       .Q             (Q),
       .REDUCTION_TYPE(REDUCTION_TYPE)
-  ) u_butterfly (
-      .a      (butterfly_in_a),
-      .b      (butterfly_in_b),
-      .twiddle(butterfly_twiddle),
-      .a_out  (butterfly_out_a),
-      .b_out  (butterfly_out_b)
+  ) u_inv_mult (
+      .a     (butterfly_diff),
+      .b     (butterfly_twiddle),
+      .result(butterfly_twiddled)
   );
+
+  assign butterfly_out_a = butterfly_sum;
+  assign butterfly_out_b = butterfly_twiddled;
 
   // Control FSM (same as forward NTT)
   ntt_control #(
       .N         (N),
-      .ADDR_WIDTH(ADDR_WIDTH)
+      .ADDR_WIDTH(ADDR_WIDTH),
+      .INVERSE   (1'b1)
   ) u_control (
       .clk            (clk),
       .rst_n          (rst_n),

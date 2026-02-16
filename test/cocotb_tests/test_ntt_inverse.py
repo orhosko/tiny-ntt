@@ -233,11 +233,11 @@ async def test_polynomial_multiplication_full(dut):
     # Polynomials:
     # p1(x) = 1 + 5x + x^2
     # p2(x) = 5 + x
-    # Expected: 5 + 10x + 6x^2 + x^3
+    # Expected (negacyclic NTT result): 5 + 26x + 10x^2 + x^3
     
     poly1 = [1, 5, 1] + [0] * (N - 3)
     poly2 = [5, 1] + [0] * (N - 2)
-    expected_product = [5, 10, 6, 1] + [0] * (N - 4)
+    expected_product = [5, 26, 10, 1] + [0] * (N - 4)
     
     dut._log.info("  p1(x) = x^2 + 5x + 1")
     dut._log.info("  p2(x) = x + 5")

@@ -188,6 +188,8 @@ test-all: clean
 	@echo ""
 	@$(MAKE) test-butterfly
 	@echo ""
+	@$(MAKE) test-butterfly-inverse
+	@echo ""
 	@$(MAKE) test-twiddle-rom
 	@echo ""
 	@$(MAKE) test-coeff-ram
@@ -197,6 +199,14 @@ test-all: clean
 	@$(MAKE) test-ntt-control
 	@echo ""
 	@$(MAKE) test-ntt-forward
+	@echo ""
+	@$(MAKE) test-ntt-poly
+	@echo ""
+	@$(MAKE) test-ntt-inverse
+	@echo ""
+	@$(MAKE) test-intt-unit
+	@echo ""
+	@$(MAKE) test-ntt-forward-new
 	@echo ""
 	@echo "======================================================================"
 	@echo " All tests completed!"

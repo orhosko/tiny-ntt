@@ -168,7 +168,9 @@ module ntt_forward #(
   // Control FSM
   ntt_control #(
       .N         (N),
-      .ADDR_WIDTH(ADDR_WIDTH)
+      .ADDR_WIDTH(ADDR_WIDTH),
+      .INVERSE   (1'b0),
+      .DIF       (1'b1)
   ) u_control (
       .clk            (clk),
       .rst_n          (rst_n),

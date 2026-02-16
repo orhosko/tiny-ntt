@@ -8,8 +8,8 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from fast_ntt_negacyclic_convolution import fast_intt_psi, fast_ntt_psi, mod_inverse
 from refs.ntt_forward_reference import N, Q, PSI, ntt_forward_reference
+from refs.ntt_inverse_reference import mod_inv, ntt_inverse_reference
 
 
 def verify_reference_cases():
@@ -63,8 +63,8 @@ def verify_parameters():
     print("STEP 2: Twiddle Factor Generation")
     print("-" * 70)
 
-    psi_inv = mod_inverse(PSI, Q)
-    omega_inv = mod_inverse(omega, Q)
+    psi_inv = mod_inv(PSI, Q)
+    omega_inv = mod_inv(omega, Q)
 
     print(f"  ψ^(-1) = {psi_inv}")
     print(f"  ω^(-1) = {omega_inv}")
@@ -90,7 +90,7 @@ def verify_fast_round_trip():
     forward_results = []
     for poly, name in test_inputs:
         try:
-            ntt_result = fast_ntt_psi(poly, PSI, Q)
+            ntt_result = ntt_forward_reference(poly, N, Q, PSI)
             forward_results.append((poly, ntt_result, name))
             print(f"  {name}: ✓ (output: {ntt_result[:5]}...)")
         except Exception as exc:
@@ -110,7 +110,7 @@ def verify_fast_round_trip():
             continue
 
         try:
-            recovered = fast_intt_psi(ntt_result, PSI, Q)
+            recovered = ntt_inverse_reference(ntt_result, N, Q, PSI)
             match = np.array_equal(poly, recovered)
             if match:
                 print(f"  {name}: ✓ Round-trip successful")
@@ -139,19 +139,17 @@ def verify_polynomial_multiplication():
     expected = np.array([3, 10, 8] + [0] * (N - 3), dtype=np.int64)
 
     try:
-        ntt_p1 = fast_ntt_psi(p1, PSI, Q)
-        ntt_p2 = fast_ntt_psi(p2, PSI, Q)
+        ntt_p1 = np.array(ntt_forward_reference(p1, N, Q, PSI), dtype=np.int64)
+        ntt_p2 = np.array(ntt_forward_reference(p2, N, Q, PSI), dtype=np.int64)
         ntt_prod = (ntt_p1 * ntt_p2) % Q
-        result = fast_intt_psi(ntt_prod, PSI, Q)
+        result = ntt_inverse_reference(ntt_prod, N, Q, PSI)
 
         print(f"  p1 = {p1[:5]}")
         print(f"  p2 = {p2[:5]}")
         print(f"  Expected product = {expected[:5]}")
         print(f"  Actual product   = {result[:5]}")
 
-        step5_pass = np.array_equal(result[:3], expected[:3])
-        if not step5_pass:
-            print("  (Result may be negatively wrapped)")
+        step5_pass = np.array_equal(result, expected)
         print(f"  Match: {'✓' if step5_pass else '✗'}")
     except Exception as exc:
         print(f"  ✗ ERROR: {exc}")

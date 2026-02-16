@@ -49,6 +49,7 @@ help:
 	@echo "  make test-coeff-ram    - Test coefficient RAM"
 	@echo "  make test-ntt-mult     - Test NTT pointwise multiplication"
 	@echo "  make test-ntt-control  - Test NTT control FSM"
+	@echo "  make test-ntt-poly     - Test NTT polynomial multiply"
 	@echo "  make test-all          - Run all tests"
 	@echo "  make clean             - Clean build artifacts"
 	@echo ""
@@ -150,8 +151,21 @@ test-ntt-control: clean
 		VERILOG_SOURCES="$(PWD)/../rtl/ntt_control.sv" \
 		sim
 
+# Test NTT polynomial multiply
+test-ntt-poly: clean
+	@echo ""
+	@echo "======================================================================"
+	@echo " Testing NTT Polynomial Multiply (Top Level)"
+	@echo "======================================================================"
+	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
+		MODULE=cocotb_tests.test_ntt_poly_mult \
+		TOPLEVEL=ntt_poly_mult \
+		VERILOG_SOURCES="$(PWD)/../rtl/ntt_poly_mult.sv $(PWD)/../rtl/ntt_forward.sv $(PWD)/../rtl/ntt_control.sv $(PWD)/../rtl/ntt_inverse.sv $(PWD)/../rtl/ntt_control_inverse.sv $(PWD)/../rtl/twiddle_rom.sv $(PWD)/../rtl/inverse_twiddle_rom.sv $(PWD)/../rtl/coeff_ram.sv $(PWD)/../rtl/ntt_butterfly.sv $(PWD)/../rtl/ntt_butterfly_inverse.sv $(PWD)/../rtl/mod_mult.sv $(PWD)/../rtl/mod_add.sv $(PWD)/../rtl/mod_sub.sv $(PWD)/../rtl/barrett_reduction.sv $(PWD)/../rtl/montgomery_reduction.sv" \
+		sim
+
 # Test NTT forward (full integration)
 test-ntt-forward: clean
+
 	@echo ""
 	@echo "======================================================================"
 	@echo " Testing NTT Forward Transform (Full Integration)"

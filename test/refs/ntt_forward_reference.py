@@ -36,33 +36,37 @@ def bit_reverse_order(n):
 
 def ntt_forward_reference(coeffs, N=N, q=Q, psi=PSI):
     """
-    Fast NTT using Cooley-Tukey (DIT) with ψ-based twiddles.
+    Fast NTT using Cooley-Tukey (DIF) with ψ-based twiddles.
 
     Input: Normal Order (NO)
-    Output: Hardware-order output (matches control twiddle addressing).
+    Output: Bit-Reversed Order (BO)
     """
     n = len(coeffs)
     if n != N:
         raise ValueError(f"Input must have {N} coefficients, got {n}")
 
     result = np.array(coeffs, dtype=object)
+    brv = bit_reverse_order(n)
 
-    m = 2
-    while m <= N:
-        step = N // m
-        half = m // 2
-        for base in range(0, N, m):
-            for j in range(half):
-                w = pow(int(psi), int(j * step), q)
-                idx1 = base + j
-                idx2 = idx1 + half
+    t = 1
+    m = n // 2
+
+    while m >= 1:
+        for k in range(t):
+            p = brv[t + k]
+            w = pow(int(psi), int(p), q)
+            for j in range(m):
+                idx1 = 2 * m * k + j
+                idx2 = idx1 + m
 
                 u = result[idx1]
                 v = (result[idx2] * w) % q
 
                 result[idx1] = (u + v) % q
                 result[idx2] = (u - v) % q
-        m *= 2
+
+        t *= 2
+        m //= 2
 
     return result.astype(np.int64).tolist()
 

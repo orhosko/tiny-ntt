@@ -259,6 +259,42 @@ async def test_ntt_simple_vector(dut):
     assert mismatches == 0, f"Simple vector test failed with {mismatches} mismatches"
     dut._log.info(f"✓ Simple vector test passed ({cycles} cycles)")
 
+
+
+@cocotb.test()
+async def test_ntt_clock(dut):
+    """Smoke test for default N/Q parameters."""
+    dut._log.info(f"Testing Forward NTT with N={N}, Q={Q}")
+
+    clock = Clock(dut.clk, 10, unit="ns")
+    cocotb.start_soon(clock.start())
+
+    # Reset
+    dut.rst_n.value = 0
+    dut.start.value = 0
+    await RisingEdge(dut.clk)
+    dut.rst_n.value = 1
+    await RisingEdge(dut.clk)
+
+    test_poly = [1, 2, 3] + [0] * (N - 3)
+    await load_coefficients(dut, test_poly)
+
+    expected = ntt_forward_reference(test_poly, N, Q, PSI)
+
+    cycles = await run_ntt(dut)
+    results = await read_coefficients(dut)
+
+    mismatches = 0
+    for i in range(N):
+        if results[i] != expected[i]:
+            if mismatches < 10:
+                dut._log.error(f"Mismatch at [{i}]: HW={results[i]}, PY={expected[i]}")
+            mismatches += 1
+
+    assert mismatches == 0, f"Hardware output doesn't match Python reference ({mismatches} mismatches)"
+    dut._log.info(f"✓ Parameter smoke test passed ({cycles} cycles)")
+
+
 @cocotb.test()
 async def test_ntt_reference_comparison(dut):
     """Test NTT against Python reference with various inputs"""

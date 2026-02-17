@@ -17,7 +17,8 @@ module ntt_poly_mult #(
     parameter int WIDTH          = 32,
     parameter int Q              = 8380417,
     parameter int ADDR_WIDTH     = 8,
-    parameter int REDUCTION_TYPE = 0
+    parameter int REDUCTION_TYPE = 0,
+    parameter bit POINTWISE_PARALLEL = 1'b0
 ) (
     input  logic clk,
     input  logic rst_n,
@@ -108,6 +109,10 @@ module ntt_poly_mult #(
   logic [WIDTH-1:0] mul_a;
   logic [WIDTH-1:0] mul_b;
   logic [WIDTH-1:0] mul_result;
+  logic [N*WIDTH-1:0] a_ntt_flat;
+  logic [N*WIDTH-1:0] b_ntt_flat;
+  logic [N*WIDTH-1:0] c_ntt_flat;
+  logic [WIDTH-1:0] c_ntt_parallel[0:N-1];
 
   //==============================================================================
   // Coefficient load storage
@@ -169,15 +174,41 @@ module ntt_poly_mult #(
   //==============================================================================
   // Pointwise multiplier
   //==============================================================================
-  mod_mult #(
-      .WIDTH(WIDTH),
-      .Q(Q),
-      .REDUCTION_TYPE(REDUCTION_TYPE)
-  ) u_pointwise_mult (
-      .a(mul_a),
-      .b(mul_b),
-      .result(mul_result)
-  );
+  always_comb begin
+    for (int i = 0; i < N; i++) begin
+      a_ntt_flat[i * WIDTH +: WIDTH] = a_ntt[i];
+      b_ntt_flat[i * WIDTH +: WIDTH] = b_ntt[i];
+    end
+  end
+
+  for (genvar i = 0; i < N; i++) begin : gen_unpack_parallel
+    assign c_ntt_parallel[i] = c_ntt_flat[i * WIDTH +: WIDTH];
+  end
+
+  generate
+    if (POINTWISE_PARALLEL) begin : gen_pointwise_parallel
+      ntt_pointwise_mult #(
+          .N(N),
+          .WIDTH(WIDTH),
+          .Q(Q),
+          .REDUCTION_TYPE(REDUCTION_TYPE)
+      ) u_pointwise_mult_parallel (
+          .poly_a_flat(a_ntt_flat),
+          .poly_b_flat(b_ntt_flat),
+          .poly_c_flat(c_ntt_flat)
+      );
+    end else begin : gen_pointwise_serial
+      mod_mult #(
+          .WIDTH(WIDTH),
+          .Q(Q),
+          .REDUCTION_TYPE(REDUCTION_TYPE)
+      ) u_pointwise_mult (
+          .a(mul_a),
+          .b(mul_b),
+          .result(mul_result)
+      );
+    end
+  endgenerate
 
   //==============================================================================
   // FSM
@@ -249,11 +280,18 @@ module ntt_poly_mult #(
           end
         end
         POINTWISE: begin
-          if (point_index < N) begin
-            c_ntt[point_index] <= mul_result;
-          end
-          if (point_index < N) begin
-            point_index <= point_index + 1'b1;
+          if (POINTWISE_PARALLEL) begin
+            for (int i = 0; i < N; i++) begin
+              c_ntt[i] <= c_ntt_parallel[i];
+            end
+            point_index <= N[READ_COUNT_WIDTH-1:0];
+          end else begin
+            if (point_index < N) begin
+              c_ntt[point_index] <= mul_result;
+            end
+            if (point_index < N) begin
+              point_index <= point_index + 1'b1;
+            end
           end
         end
         RUN_A: begin

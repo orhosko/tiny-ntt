@@ -18,7 +18,7 @@ module ntt_poly_mult #(
     parameter int Q              = 8380417,
     parameter int ADDR_WIDTH     = 8,
     parameter int REDUCTION_TYPE = 0,
-    parameter int PARALLEL       = 8,
+    parameter int PARALLEL       = 1,
     parameter bit POINTWISE_PARALLEL = 1'b0
 ) (
     input  logic clk,
@@ -66,14 +66,11 @@ module ntt_poly_mult #(
   logic [WIDTH-1:0] b_ntt[0:N-1];
   logic [WIDTH-1:0] c_ntt[0:N-1];
 
-  // Initialize arrays for simulation
+  // Initialize coefficient storage for simulation
   initial begin
     for (int i = 0; i < N; i++) begin
       a_mem[i] = '0;
       b_mem[i] = '0;
-      a_ntt[i] = '0;
-      b_ntt[i] = '0;
-      c_ntt[i] = '0;
     end
   end
 
@@ -105,6 +102,7 @@ module ntt_poly_mult #(
 
   logic fwd_started;
   logic inv_started;
+  logic clear_ntt;
 
   // Pointwise multiplier
   logic [WIDTH-1:0] mul_a;
@@ -216,6 +214,8 @@ module ntt_poly_mult #(
   //==============================================================================
   // FSM
   //==============================================================================
+  assign clear_ntt = (state == IDLE && next_state == LOAD_A);
+
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       state <= IDLE;
@@ -231,13 +231,6 @@ module ntt_poly_mult #(
       if (state != next_state) begin
         if (next_state == LOAD_A || next_state == LOAD_B || next_state == LOAD_INV) begin
           load_index <= '0;
-        end
-        if (next_state == LOAD_A && state == IDLE) begin
-          for (int i = 0; i < N; i++) begin
-            a_ntt[i] <= '0;
-            b_ntt[i] <= '0;
-            c_ntt[i] <= '0;
-          end
         end
         if (next_state == READ_A || next_state == READ_B) begin
           read_index <= '0;
@@ -261,9 +254,6 @@ module ntt_poly_mult #(
           end
         end
         READ_A: begin
-          if (read_pending) begin
-            a_ntt[read_index - 1] <= fwd_read_data;
-          end
           if (read_index < N) begin
             read_index <= read_index + 1'b1;
             read_pending <= 1'b1;
@@ -272,9 +262,6 @@ module ntt_poly_mult #(
           end
         end
         READ_B: begin
-          if (read_pending) begin
-            b_ntt[read_index - 1] <= fwd_read_data;
-          end
           if (read_index < N) begin
             read_index <= read_index + 1'b1;
             read_pending <= 1'b1;
@@ -284,14 +271,8 @@ module ntt_poly_mult #(
         end
         POINTWISE: begin
           if (POINTWISE_PARALLEL) begin
-            for (int i = 0; i < N; i++) begin
-              c_ntt[i] <= c_ntt_parallel[i];
-            end
             point_index <= N[READ_COUNT_WIDTH-1:0];
           end else begin
-            if (point_index < N) begin
-              c_ntt[point_index] <= mul_result;
-            end
             if (point_index < N) begin
               point_index <= point_index + 1'b1;
             end
@@ -305,6 +286,51 @@ module ntt_poly_mult #(
         RUN_INV: begin
           if (inv_start) begin
             inv_started <= 1'b1;
+          end
+        end
+        default: begin
+        end
+      endcase
+    end
+  end
+
+  //==============================================================================
+  // NTT coefficient storage
+  //==============================================================================
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      for (int i = 0; i < N; i++) begin
+        a_ntt[i] <= '0;
+        b_ntt[i] <= '0;
+        c_ntt[i] <= '0;
+      end
+    end else if (clear_ntt) begin
+      for (int i = 0; i < N; i++) begin
+        a_ntt[i] <= '0;
+        b_ntt[i] <= '0;
+        c_ntt[i] <= '0;
+      end
+    end else begin
+      case (state)
+        READ_A: begin
+          if (read_pending) begin
+            a_ntt[read_index - 1] <= fwd_read_data;
+          end
+        end
+        READ_B: begin
+          if (read_pending) begin
+            b_ntt[read_index - 1] <= fwd_read_data;
+          end
+        end
+        POINTWISE: begin
+          if (POINTWISE_PARALLEL) begin
+            for (int i = 0; i < N; i++) begin
+              c_ntt[i] <= c_ntt_parallel[i];
+            end
+          end else begin
+            if (point_index < N) begin
+              c_ntt[point_index] <= mul_result;
+            end
           end
         end
         default: begin

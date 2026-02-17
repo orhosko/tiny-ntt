@@ -179,21 +179,6 @@ module ntt_inverse #(
 
   assign scale_read_addr = scale_addr[ADDR_WIDTH-1:0];
 
-  // Initialize memory for simulation
-  initial begin
-    for (int bank = 0; bank < BANKS; bank++) begin
-      for (int idx = 0; idx < BANK_DEPTH; idx++) begin
-        mem_bank[bank][idx] = '0;
-      end
-    end
-  end
-
-  // Load coefficients when idle
-  always_ff @(posedge clk) begin
-    if (load_coeff && state == IDLE) begin
-      mem_bank[bank_sel(load_addr)][bank_index(load_addr)] <= load_data;
-    end
-  end
 
   // Read interface (synchronous)
   always_ff @(posedge clk) begin
@@ -269,9 +254,11 @@ module ntt_inverse #(
     end
   endgenerate
 
-  // Write-back results
+  // Write-back results / load coefficients
   always_ff @(posedge clk) begin
-    if (state == INTT_COMPUTE) begin
+    if (load_coeff && state == IDLE) begin
+      mem_bank[bank_sel(load_addr)][bank_index(load_addr)] <= load_data;
+    end else if (state == INTT_COMPUTE) begin
       for (int lane_idx = 0; lane_idx < PARALLEL; lane_idx++) begin
         if (lane_valid[lane_idx]) begin
           mem_bank[addr0_bank[lane_idx]][addr0_index[lane_idx]] <= a_out[lane_idx];

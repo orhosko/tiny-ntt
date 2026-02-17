@@ -18,6 +18,7 @@ module ntt_poly_mult #(
     parameter int Q              = 8380417,
     parameter int ADDR_WIDTH     = 8,
     parameter int REDUCTION_TYPE = 0,
+    parameter int PARALLEL       = 8,
     parameter bit POINTWISE_PARALLEL = 1'b0
 ) (
     input  logic clk,
@@ -135,7 +136,8 @@ module ntt_poly_mult #(
       .WIDTH(WIDTH),
       .Q(Q),
       .ADDR_WIDTH(ADDR_WIDTH),
-      .REDUCTION_TYPE(REDUCTION_TYPE)
+      .REDUCTION_TYPE(REDUCTION_TYPE),
+      .PARALLEL(PARALLEL)
   ) u_forward (
       .clk       (clk),
       .rst_n     (rst_n),
@@ -157,7 +159,8 @@ module ntt_poly_mult #(
       .WIDTH(WIDTH),
       .Q(Q),
       .ADDR_WIDTH(ADDR_WIDTH),
-      .REDUCTION_TYPE(REDUCTION_TYPE)
+      .REDUCTION_TYPE(REDUCTION_TYPE),
+      .PARALLEL(PARALLEL)
   ) u_inverse (
       .clk       (clk),
       .rst_n     (rst_n),

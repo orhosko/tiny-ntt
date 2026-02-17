@@ -160,7 +160,7 @@ test-ntt-poly: clean
 	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
 		MODULE=cocotb_tests.test_ntt_poly_mult \
 		TOPLEVEL=ntt_poly_mult \
-		VERILOG_SOURCES="$(PWD)/../rtl/ntt_poly_mult.sv $(PWD)/../rtl/ntt_forward.sv $(PWD)/../rtl/ntt_control_parallel.sv $(PWD)/../rtl/ntt_control.sv $(PWD)/../rtl/ntt_inverse.sv $(PWD)/../rtl/ntt_control_inverse.sv $(PWD)/../rtl/ntt_pointwise_mult.sv $(PWD)/../rtl/twiddle_rom.sv $(PWD)/../rtl/inverse_twiddle_rom.sv $(PWD)/../rtl/coeff_ram.sv $(PWD)/../rtl/ntt_butterfly.sv $(PWD)/../rtl/ntt_butterfly_inverse.sv $(PWD)/../rtl/mod_mult.sv $(PWD)/../rtl/mod_add.sv $(PWD)/../rtl/mod_sub.sv $(PWD)/../rtl/barrett_reduction.sv $(PWD)/../rtl/montgomery_reduction.sv" \
+		VERILOG_SOURCES="$(PWD)/../rtl/ntt_poly_mult.sv $(PWD)/../rtl/ntt_forward.sv $(PWD)/../rtl/ntt_control_parallel.sv $(PWD)/../rtl/ntt_control.sv $(PWD)/../rtl/ntt_inverse.sv $(PWD)/../rtl/ntt_pointwise_mult.sv $(PWD)/../rtl/twiddle_rom.sv $(PWD)/../rtl/inverse_twiddle_rom.sv $(PWD)/../rtl/coeff_ram.sv $(PWD)/../rtl/ntt_butterfly.sv $(PWD)/../rtl/ntt_butterfly_inverse.sv $(PWD)/../rtl/mod_mult.sv $(PWD)/../rtl/mod_add.sv $(PWD)/../rtl/mod_sub.sv $(PWD)/../rtl/barrett_reduction.sv $(PWD)/../rtl/montgomery_reduction.sv" \
 		sim
 
 # Test NTT forward (full integration)
@@ -217,7 +217,7 @@ test-ntt-inverse: clean
 	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
 		MODULE=cocotb_tests.test_ntt_inverse \
 		TOPLEVEL=ntt_inverse \
-		VERILOG_SOURCES="$(PWD)/../rtl/ntt_inverse.sv $(PWD)/../rtl/ntt_control_inverse.sv $(PWD)/../rtl/ntt_control.sv $(PWD)/../rtl/coeff_ram.sv $(PWD)/../rtl/inverse_twiddle_rom.sv $(PWD)/../rtl/ntt_butterfly_inverse.sv $(PWD)/../rtl/mod_mult.sv $(PWD)/../rtl/mod_add.sv $(PWD)/../rtl/mod_sub.sv $(PWD)/../rtl/barrett_reduction.sv $(PWD)/../rtl/montgomery_reduction.sv" \
+		VERILOG_SOURCES="$(PWD)/../rtl/ntt_inverse.sv $(PWD)/../rtl/ntt_control_parallel.sv $(PWD)/../rtl/ntt_control.sv $(PWD)/../rtl/coeff_ram.sv $(PWD)/../rtl/inverse_twiddle_rom.sv $(PWD)/../rtl/ntt_butterfly_inverse.sv $(PWD)/../rtl/mod_mult.sv $(PWD)/../rtl/mod_add.sv $(PWD)/../rtl/mod_sub.sv $(PWD)/../rtl/barrett_reduction.sv $(PWD)/../rtl/montgomery_reduction.sv" \
 		sim
 
 # Clean target

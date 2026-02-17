@@ -36,8 +36,13 @@ module ntt_forward #(
   localparam int TOTAL_BUTTERFLIES = N / 2;
   localparam int TWIDDLE_WIDTH = 24;
 
-  // Coefficient storage (multi-ported register file)
-  logic [WIDTH-1:0] mem[0:N-1];
+  // Banked coefficient storage
+  localparam int BANKS = PARALLEL * 3;
+  localparam int BANK_DEPTH = (N + BANKS - 1) / BANKS;
+  localparam int BANK_ADDR_WIDTH = $clog2(BANKS);
+  localparam int BANK_DEPTH_WIDTH = $clog2(BANK_DEPTH);
+
+  logic [WIDTH-1:0] mem_bank[0:BANKS-1][0:BANK_DEPTH-1];
 
   // Control signals
   logic [LOGN-1:0] stage;
@@ -58,9 +63,21 @@ module ntt_forward #(
     return reversed;
   endfunction
 
+  function automatic [BANK_ADDR_WIDTH-1:0] bank_sel(input logic [ADDR_WIDTH-1:0] addr);
+    return addr % BANKS;
+  endfunction
+
+  function automatic [BANK_DEPTH_WIDTH-1:0] bank_index(input logic [ADDR_WIDTH-1:0] addr);
+    return addr / BANKS;
+  endfunction
+
   logic [PARALLEL-1:0][ADDR_WIDTH-1:0] addr0;
   logic [PARALLEL-1:0][ADDR_WIDTH-1:0] addr1;
   logic [PARALLEL-1:0][ADDR_WIDTH-1:0] twiddle_addr;
+  logic [PARALLEL-1:0][BANK_ADDR_WIDTH-1:0] addr0_bank;
+  logic [PARALLEL-1:0][BANK_ADDR_WIDTH-1:0] addr1_bank;
+  logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr0_index;
+  logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr1_index;
 
   // Butterfly signals
   logic [PARALLEL-1:0][WIDTH-1:0] a_in;
@@ -72,21 +89,23 @@ module ntt_forward #(
 
   // Initialize memory
   initial begin
-    for (int i = 0; i < N; i++) begin
-      mem[i] = '0;
+    for (int bank = 0; bank < BANKS; bank++) begin
+      for (int idx = 0; idx < BANK_DEPTH; idx++) begin
+        mem_bank[bank][idx] = '0;
+      end
     end
   end
 
   // Load coefficients when idle
   always_ff @(posedge clk) begin
     if (load_coeff && !busy) begin
-      mem[load_addr] <= load_data;
+      mem_bank[bank_sel(load_addr)][bank_index(load_addr)] <= load_data;
     end
   end
 
   // Read interface (synchronous)
   always_ff @(posedge clk) begin
-    read_data <= mem[read_addr];
+    read_data <= mem_bank[bank_sel(read_addr)][bank_index(read_addr)];
   end
 
   // Control FSM (parallel scheduling)
@@ -124,11 +143,20 @@ module ntt_forward #(
         addr0[lane] = ADDR_WIDTH'(group * block_size + position);
         addr1[lane] = addr0[lane] + half_block;
 
+        addr0_bank[lane] = bank_sel(addr0[lane]);
+        addr1_bank[lane] = bank_sel(addr1[lane]);
+        addr0_index[lane] = bank_index(addr0[lane]);
+        addr1_index[lane] = bank_index(addr1[lane]);
+
         twiddle_input = ADDR_WIDTH'(1 << stage) + group;
         twiddle_addr[lane] = bit_reverse(twiddle_input);
       end else begin
         addr0[lane] = '0;
         addr1[lane] = '0;
+        addr0_bank[lane] = '0;
+        addr1_bank[lane] = '0;
+        addr0_index[lane] = '0;
+        addr1_index[lane] = '0;
         twiddle_addr[lane] = '0;
       end
     end
@@ -137,8 +165,8 @@ module ntt_forward #(
   // Combinational reads
   always_comb begin
     for (int lane = 0; lane < PARALLEL; lane++) begin
-      a_in[lane] = mem[addr0[lane]];
-      b_in[lane] = mem[addr1[lane]];
+      a_in[lane] = mem_bank[addr0_bank[lane]][addr0_index[lane]];
+      b_in[lane] = mem_bank[addr1_bank[lane]][addr1_index[lane]];
       twiddle[lane] = {{(WIDTH-TWIDDLE_WIDTH){1'b0}}, twiddle_raw[lane]};
     end
   end
@@ -171,8 +199,8 @@ module ntt_forward #(
     if (busy) begin
       for (int lane_idx = 0; lane_idx < PARALLEL; lane_idx++) begin
         if (lane_valid[lane_idx]) begin
-          mem[addr0[lane_idx]] <= a_out[lane_idx];
-          mem[addr1[lane_idx]] <= b_out[lane_idx];
+          mem_bank[addr0_bank[lane_idx]][addr0_index[lane_idx]] <= a_out[lane_idx];
+          mem_bank[addr1_bank[lane_idx]][addr1_index[lane_idx]] <= b_out[lane_idx];
         end
       end
     end

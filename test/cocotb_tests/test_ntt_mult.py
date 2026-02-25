@@ -6,14 +6,32 @@ multiplication of two NTT-domain polynomials.
 """
 
 import cocotb
-from cocotb.triggers import Timer
+from cocotb.clock import Clock
+from cocotb.triggers import RisingEdge, Timer
 import random
 import os
 
 # Design parameters
-N = 256       # Polynomial degree
-WIDTH = 32    # Coefficient width
+N = 256  # Polynomial degree
+WIDTH = 32  # Coefficient width
 Q = 8380417
+MULT_PIPELINE = 3
+CLOCK_PERIOD_NS = 1
+
+
+async def init_dut(dut):
+    cocotb.start_soon(Clock(dut.clk, CLOCK_PERIOD_NS, units="ns").start())
+    dut.rst_n.value = 0
+    await RisingEdge(dut.clk)
+    await RisingEdge(dut.clk)
+    dut.rst_n.value = 1
+    await RisingEdge(dut.clk)
+
+
+async def wait_pipeline(dut):
+    for _ in range(MULT_PIPELINE + 1):
+        await RisingEdge(dut.clk)
+    await Timer(1, unit="ps")
 
 
 def python_mod_mult(a, b, q=Q):
@@ -54,14 +72,14 @@ async def test_basic_multiplication(dut):
     reduction_name = reduction_names.get(reduction_type, f"UNKNOWN({reduction_type})")
     dut._log.info(f"Testing with REDUCTION_TYPE={reduction_type} ({reduction_name})")
     dut._log.info("Testing basic multiplication with known values")
+    await init_dut(dut)
 
     poly_a = [i for i in range(N)]
     poly_b = [1 for _ in range(N)]
 
     set_polynomial(dut.poly_a_flat, poly_a)
     set_polynomial(dut.poly_b_flat, poly_b)
-
-    await Timer(10, unit="ns")
+    await wait_pipeline(dut)
 
     result = get_polynomial(dut.poly_c_flat, N)
     expected = [python_mod_mult(poly_a[i], poly_b[i]) for i in range(N)]
@@ -78,6 +96,7 @@ async def test_basic_multiplication(dut):
 async def test_random_values(dut):
     """Test with random coefficient values"""
     dut._log.info("Testing with random values (100 iterations)")
+    await init_dut(dut)
 
     random.seed(42)  # For reproducibility
     num_tests = 100
@@ -89,7 +108,7 @@ async def test_random_values(dut):
         set_polynomial(dut.poly_a_flat, poly_a)
         set_polynomial(dut.poly_b_flat, poly_b)
 
-        await Timer(10, unit="ns")
+        await wait_pipeline(dut)
 
         result = get_polynomial(dut.poly_c_flat, N)
         expected = [python_mod_mult(poly_a[i], poly_b[i]) for i in range(N)]
@@ -109,6 +128,7 @@ async def test_random_values(dut):
 async def test_all_positions(dut):
     """Test that all 256 multiplier positions work correctly"""
     dut._log.info("Testing all multiplier positions independently")
+    await init_dut(dut)
 
     errors = []
 
@@ -121,7 +141,7 @@ async def test_all_positions(dut):
         set_polynomial(dut.poly_a_flat, poly_a)
         set_polynomial(dut.poly_b_flat, poly_b)
 
-        await Timer(10, unit="ns")
+        await wait_pipeline(dut)
 
         result = get_polynomial(dut.poly_c_flat, N)
         expected = python_mod_mult(poly_a[pos], poly_b[pos])
@@ -129,7 +149,9 @@ async def test_all_positions(dut):
         for i in range(N):
             if i == pos:
                 if result[i] != expected:
-                    errors.append(f"Position {pos}: Expected {expected}, got {result[i]}")
+                    errors.append(
+                        f"Position {pos}: Expected {expected}, got {result[i]}"
+                    )
             else:
                 if result[i] != 0:
                     errors.append(

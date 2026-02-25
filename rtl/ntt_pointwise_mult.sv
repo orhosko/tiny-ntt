@@ -16,8 +16,11 @@ module ntt_pointwise_mult #(
     parameter int N              = 256,   // Polynomial degree (number of coefficients)
     parameter int WIDTH          = 32,    // Coefficient bit width
     parameter int Q              = 8380417,  // Modulus (Dilithium prime)
-    parameter int REDUCTION_TYPE = 0      // 0=SIMPLE, 1=BARRETT, 2=MONTGOMERY
+    parameter int REDUCTION_TYPE = 0,     // 0=SIMPLE, 1=BARRETT, 2=MONTGOMERY
+    parameter int MULT_PIPELINE  = 3
 ) (
+    input  logic clk,
+    input  logic rst_n,
     input  logic [N*WIDTH-1:0] poly_a_flat,
     input  logic [N*WIDTH-1:0] poly_b_flat,
     output logic [N*WIDTH-1:0] poly_c_flat
@@ -34,8 +37,11 @@ module ntt_pointwise_mult #(
       mod_mult #(
           .WIDTH(WIDTH),
           .Q(Q),
-          .REDUCTION_TYPE(REDUCTION_TYPE)
+          .REDUCTION_TYPE(REDUCTION_TYPE),
+          .PIPELINE_STAGES(MULT_PIPELINE)
       ) mult_inst (
+          .clk(clk),
+          .rst_n(rst_n),
           .a(a_coeff),
           .b(b_coeff),
           .result(c_coeff)

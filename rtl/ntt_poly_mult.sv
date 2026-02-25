@@ -13,13 +13,14 @@
 //==============================================================================
 
 module ntt_poly_mult #(
-    parameter int N              = 256,
+    parameter int N              = 4096,
     parameter int WIDTH          = 32,
     parameter int Q              = 8380417,
     parameter int ADDR_WIDTH     = 8,
-    parameter int REDUCTION_TYPE = 0,
+    parameter int REDUCTION_TYPE = 1,
     parameter int PARALLEL       = 1,
-    parameter bit POINTWISE_PARALLEL = 1'b0
+    parameter bit POINTWISE_PARALLEL = 1'b0,
+    parameter int MULT_PIPELINE  = 3
 ) (
     input  logic clk,
     input  logic rst_n,
@@ -99,6 +100,8 @@ module ntt_poly_mult #(
   logic [READ_COUNT_WIDTH-1:0] read_index;
   logic read_pending;
   logic [READ_COUNT_WIDTH-1:0] point_index;
+  logic [READ_COUNT_WIDTH-1:0] mul_index_pipe[0:MULT_PIPELINE];
+  logic [MULT_PIPELINE:0] mul_valid_pipe;
 
   logic fwd_started;
   logic inv_started;
@@ -135,7 +138,8 @@ module ntt_poly_mult #(
       .Q(Q),
       .ADDR_WIDTH(ADDR_WIDTH),
       .REDUCTION_TYPE(REDUCTION_TYPE),
-      .PARALLEL(PARALLEL)
+      .PARALLEL(PARALLEL),
+      .MULT_PIPELINE(MULT_PIPELINE)
   ) u_forward (
       .clk       (clk),
       .rst_n     (rst_n),
@@ -158,7 +162,8 @@ module ntt_poly_mult #(
       .Q(Q),
       .ADDR_WIDTH(ADDR_WIDTH),
       .REDUCTION_TYPE(REDUCTION_TYPE),
-      .PARALLEL(PARALLEL)
+      .PARALLEL(PARALLEL),
+      .MULT_PIPELINE(MULT_PIPELINE)
   ) u_inverse (
       .clk       (clk),
       .rst_n     (rst_n),
@@ -192,8 +197,11 @@ module ntt_poly_mult #(
           .N(N),
           .WIDTH(WIDTH),
           .Q(Q),
-          .REDUCTION_TYPE(REDUCTION_TYPE)
+          .REDUCTION_TYPE(REDUCTION_TYPE),
+          .MULT_PIPELINE(MULT_PIPELINE)
       ) u_pointwise_mult_parallel (
+          .clk        (clk),
+          .rst_n      (rst_n),
           .poly_a_flat(a_ntt_flat),
           .poly_b_flat(b_ntt_flat),
           .poly_c_flat(c_ntt_flat)
@@ -202,8 +210,11 @@ module ntt_poly_mult #(
       mod_mult #(
           .WIDTH(WIDTH),
           .Q(Q),
-          .REDUCTION_TYPE(REDUCTION_TYPE)
+          .REDUCTION_TYPE(REDUCTION_TYPE),
+          .PIPELINE_STAGES(MULT_PIPELINE)
       ) u_pointwise_mult (
+          .clk   (clk),
+          .rst_n (rst_n),
           .a(mul_a),
           .b(mul_b),
           .result(mul_result)
@@ -271,7 +282,11 @@ module ntt_poly_mult #(
         end
         POINTWISE: begin
           if (POINTWISE_PARALLEL) begin
-            point_index <= N[READ_COUNT_WIDTH-1:0];
+            if (point_index < MULT_PIPELINE[READ_COUNT_WIDTH-1:0]) begin
+              point_index <= point_index + 1'b1;
+            end else begin
+              point_index <= N[READ_COUNT_WIDTH-1:0];
+            end
           end else begin
             if (point_index < N) begin
               point_index <= point_index + 1'b1;
@@ -291,6 +306,30 @@ module ntt_poly_mult #(
         default: begin
         end
       endcase
+    end
+  end
+
+  //==============================================================================
+  // Pointwise multiply pipeline tracking (serial)
+  //==============================================================================
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      for (int stage_idx = 0; stage_idx <= MULT_PIPELINE; stage_idx++) begin
+        mul_index_pipe[stage_idx] <= '0;
+        mul_valid_pipe[stage_idx] <= 1'b0;
+      end
+    end else if (state == POINTWISE && !POINTWISE_PARALLEL) begin
+      mul_index_pipe[0] <= point_index;
+      mul_valid_pipe[0] <= (point_index < N);
+      for (int stage_idx = 1; stage_idx <= MULT_PIPELINE; stage_idx++) begin
+        mul_index_pipe[stage_idx] <= mul_index_pipe[stage_idx - 1];
+        mul_valid_pipe[stage_idx] <= mul_valid_pipe[stage_idx - 1];
+      end
+    end else begin
+      for (int stage_idx = 0; stage_idx <= MULT_PIPELINE; stage_idx++) begin
+        mul_index_pipe[stage_idx] <= '0;
+        mul_valid_pipe[stage_idx] <= 1'b0;
+      end
     end
   end
 
@@ -324,12 +363,18 @@ module ntt_poly_mult #(
         end
         POINTWISE: begin
           if (POINTWISE_PARALLEL) begin
-            for (int i = 0; i < N; i++) begin
-              c_ntt[i] <= c_ntt_parallel[i];
+            if (point_index == MULT_PIPELINE[READ_COUNT_WIDTH-1:0]) begin
+              for (int i = 0; i < N; i++) begin
+                c_ntt[i] <= c_ntt_parallel[i];
+              end
             end
           end else begin
-            if (point_index < N) begin
-              c_ntt[point_index] <= mul_result;
+            if (MULT_PIPELINE == 0) begin
+              if (point_index < N) begin
+                c_ntt[point_index] <= mul_result;
+              end
+            end else if (mul_valid_pipe[MULT_PIPELINE]) begin
+              c_ntt[mul_index_pipe[MULT_PIPELINE]] <= mul_result;
             end
           end
         end
@@ -365,7 +410,15 @@ module ntt_poly_mult #(
         if (read_index >= N && !read_pending) next_state = POINTWISE;
       end
       POINTWISE: begin
-        if (point_index >= N) next_state = LOAD_INV;
+        if (POINTWISE_PARALLEL) begin
+          if (point_index >= N) next_state = LOAD_INV;
+        end else if (MULT_PIPELINE == 0) begin
+          if (point_index >= N) next_state = LOAD_INV;
+        end else begin
+          if (point_index >= N && !mul_valid_pipe[MULT_PIPELINE]) begin
+            next_state = LOAD_INV;
+          end
+        end
       end
       LOAD_INV: begin
         if (load_index >= N) next_state = RUN_INV;

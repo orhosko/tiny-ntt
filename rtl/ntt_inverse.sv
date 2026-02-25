@@ -23,7 +23,8 @@ module ntt_inverse #(
     parameter int ADDR_WIDTH     = 8,        // log₂(N)
     parameter int REDUCTION_TYPE = 0,        // 0=Simple, 1=Barrett, 2=Montgomery
     parameter int N_INV          = 8347681,  // N^(-1) mod Q = 256^(-1) mod 8380417
-    parameter int PARALLEL       = 8         // Butterflies per cycle
+    parameter int PARALLEL       = 8,        // Butterflies per cycle
+    parameter int MULT_PIPELINE  = 3
 ) (
     input logic clk,
     input logic rst_n,
@@ -62,6 +63,7 @@ module ntt_inverse #(
 
   // Control FSM signals (for INTT)
   logic intt_start, intt_done, intt_busy;
+  logic intt_done_latched;
   logic [LOGN-1:0] stage;
   logic [$clog2(TOTAL_BUTTERFLIES)-1:0] butterfly_base;
   logic [$clog2(TOTAL_BUTTERFLIES)-1:0] cycle;
@@ -87,6 +89,12 @@ module ntt_inverse #(
   logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr0_index;
   logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr1_index;
 
+  logic [PARALLEL-1:0][BANK_ADDR_WIDTH-1:0] addr0_bank_pipe[0:MULT_PIPELINE];
+  logic [PARALLEL-1:0][BANK_ADDR_WIDTH-1:0] addr1_bank_pipe[0:MULT_PIPELINE];
+  logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr0_index_pipe[0:MULT_PIPELINE];
+  logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr1_index_pipe[0:MULT_PIPELINE];
+  logic [PARALLEL-1:0] lane_valid_pipe[0:MULT_PIPELINE];
+
   // Twiddle and butterfly signals
   logic [PARALLEL-1:0][WIDTH-1:0] twiddle_raw;
   logic [PARALLEL-1:0][WIDTH-1:0] a_in;
@@ -98,6 +106,8 @@ module ntt_inverse #(
   localparam int SCALE_LATENCY = 0;
   logic [ADDR_WIDTH:0] scale_addr;  // 9 bits: 0-256
   logic [   WIDTH-1:0] scale_result;
+  logic [ADDR_WIDTH:0] scale_addr_pipe[0:MULT_PIPELINE];
+  logic [MULT_PIPELINE:0] scale_valid_pipe;
 
 
   //============================================================================
@@ -118,11 +128,15 @@ module ntt_inverse #(
       end
 
       INTT_COMPUTE: begin
-        if (intt_done) next_state = SCALE;
+        if (intt_done_latched && !lane_valid_pipe[MULT_PIPELINE]) begin
+          next_state = SCALE;
+        end
       end
 
       SCALE: begin
-        if (scale_addr >= N) next_state = DONE_STATE;
+        if (scale_addr >= N && !scale_valid_pipe[MULT_PIPELINE]) begin
+          next_state = DONE_STATE;
+        end
       end
 
       DONE_STATE: begin
@@ -138,6 +152,21 @@ module ntt_inverse #(
   // Start INTT when entering INTT_COMPUTE state
   assign intt_start = (state == IDLE && start);
 
+  // Latch INTT completion until pipeline drains
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      intt_done_latched <= 1'b0;
+    end else if (state != INTT_COMPUTE) begin
+      intt_done_latched <= 1'b0;
+    end else begin
+      if (intt_done) begin
+        intt_done_latched <= 1'b1;
+      end else if (intt_done_latched && !lane_valid_pipe[MULT_PIPELINE]) begin
+        intt_done_latched <= 1'b0;
+      end
+    end
+  end
+
   //============================================================================
   // Scaling Counter
   //============================================================================
@@ -145,11 +174,24 @@ module ntt_inverse #(
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       scale_addr <= '0;
+      for (int stage_idx = 0; stage_idx <= MULT_PIPELINE; stage_idx++) begin
+        scale_addr_pipe[stage_idx] <= '0;
+        scale_valid_pipe[stage_idx] <= 1'b0;
+      end
     end else begin
       if (state == SCALE) begin
-        if (scale_addr < N) scale_addr <= scale_addr + 1'b1;
+        if (scale_addr < N) begin
+          scale_addr <= scale_addr + 1'b1;
+        end
       end else begin
         scale_addr <= '0;
+      end
+
+      scale_addr_pipe[0] <= scale_addr;
+      scale_valid_pipe[0] <= (state == SCALE) && (scale_addr < N);
+      for (int stage_idx = 1; stage_idx <= MULT_PIPELINE; stage_idx++) begin
+        scale_addr_pipe[stage_idx] <= scale_addr_pipe[stage_idx - 1];
+        scale_valid_pipe[stage_idx] <= scale_valid_pipe[stage_idx - 1];
       end
     end
   end
@@ -231,6 +273,34 @@ module ntt_inverse #(
     end
   end
 
+  // Pipeline address/valid alignment for mult latency
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      for (int stage_idx = 0; stage_idx <= MULT_PIPELINE; stage_idx++) begin
+        for (int lane_idx = 0; lane_idx < PARALLEL; lane_idx++) begin
+          addr0_bank_pipe[stage_idx][lane_idx] <= '0;
+          addr1_bank_pipe[stage_idx][lane_idx] <= '0;
+          addr0_index_pipe[stage_idx][lane_idx] <= '0;
+          addr1_index_pipe[stage_idx][lane_idx] <= '0;
+          lane_valid_pipe[stage_idx][lane_idx] <= 1'b0;
+        end
+      end
+    end else begin
+      addr0_bank_pipe[0] <= addr0_bank;
+      addr1_bank_pipe[0] <= addr1_bank;
+      addr0_index_pipe[0] <= addr0_index;
+      addr1_index_pipe[0] <= addr1_index;
+      lane_valid_pipe[0] <= lane_valid;
+      for (int stage_idx = 1; stage_idx <= MULT_PIPELINE; stage_idx++) begin
+        addr0_bank_pipe[stage_idx] <= addr0_bank_pipe[stage_idx - 1];
+        addr1_bank_pipe[stage_idx] <= addr1_bank_pipe[stage_idx - 1];
+        addr0_index_pipe[stage_idx] <= addr0_index_pipe[stage_idx - 1];
+        addr1_index_pipe[stage_idx] <= addr1_index_pipe[stage_idx - 1];
+        lane_valid_pipe[stage_idx] <= lane_valid_pipe[stage_idx - 1];
+      end
+    end
+  end
+
   // Twiddle ROM + butterfly per lane
   genvar lane;
   generate
@@ -241,10 +311,13 @@ module ntt_inverse #(
       );
 
       ntt_butterfly_inverse #(
-          .WIDTH(WIDTH),
-          .Q(Q),
-          .REDUCTION_TYPE(REDUCTION_TYPE)
+          .WIDTH         (WIDTH),
+          .Q             (Q),
+          .REDUCTION_TYPE(REDUCTION_TYPE),
+          .MULT_PIPELINE (MULT_PIPELINE)
       ) u_inv_butterfly (
+          .clk    (clk),
+          .rst_n  (rst_n),
           .a      (a_in[lane]),
           .b      (b_in[lane]),
           .twiddle(twiddle_raw[lane]),
@@ -260,13 +333,16 @@ module ntt_inverse #(
       mem_bank[bank_sel(load_addr)][bank_index(load_addr)] <= load_data;
     end else if (state == INTT_COMPUTE) begin
       for (int lane_idx = 0; lane_idx < PARALLEL; lane_idx++) begin
-        if (lane_valid[lane_idx]) begin
-          mem_bank[addr0_bank[lane_idx]][addr0_index[lane_idx]] <= a_out[lane_idx];
-          mem_bank[addr1_bank[lane_idx]][addr1_index[lane_idx]] <= b_out[lane_idx];
+        if (lane_valid_pipe[MULT_PIPELINE][lane_idx]) begin
+          mem_bank[addr0_bank_pipe[MULT_PIPELINE][lane_idx]]
+              [addr0_index_pipe[MULT_PIPELINE][lane_idx]] <= a_out[lane_idx];
+          mem_bank[addr1_bank_pipe[MULT_PIPELINE][lane_idx]]
+              [addr1_index_pipe[MULT_PIPELINE][lane_idx]] <= b_out[lane_idx];
         end
       end
-    end else if (state == SCALE && (scale_addr < N)) begin
-      mem_bank[bank_sel(scale_read_addr)][bank_index(scale_read_addr)] <= scale_result;
+    end else if (state == SCALE && scale_valid_pipe[MULT_PIPELINE]) begin
+      mem_bank[bank_sel(scale_addr_pipe[MULT_PIPELINE][ADDR_WIDTH-1:0])]
+          [bank_index(scale_addr_pipe[MULT_PIPELINE][ADDR_WIDTH-1:0])] <= scale_result;
     end
   end
 
@@ -284,8 +360,11 @@ module ntt_inverse #(
   mod_mult #(
       .WIDTH         (WIDTH),
       .Q             (Q),
-      .REDUCTION_TYPE(REDUCTION_TYPE)
+      .REDUCTION_TYPE(REDUCTION_TYPE),
+      .PIPELINE_STAGES(MULT_PIPELINE)
   ) scale_mult (
+      .clk   (clk),
+      .rst_n (rst_n),
       .a     (mem_bank[bank_sel(scale_read_addr)][bank_index(scale_read_addr)]),
       .b     (scaling_factor),
       .result(scale_result)

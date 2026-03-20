@@ -35,6 +35,15 @@ module ntt_butterfly_inverse #(
     output logic [WIDTH-1:0] b_out   // Second output: (a - b) · ω^(-k) mod q
 );
 
+  localparam int MOD_WIDTH = (Q > 0) ? $clog2(Q) : WIDTH;
+
+  generate
+    if (WIDTH > MOD_WIDTH) begin : gen_unused_inputs
+      (* keep *) logic unused_twiddle;
+      assign unused_twiddle = ^twiddle[WIDTH-1:MOD_WIDTH];
+    end
+  endgenerate
+
   // Intermediate results
   logic [WIDTH-1:0] sum;  // a + b
   logic [WIDTH-1:0] diff;  // a - b

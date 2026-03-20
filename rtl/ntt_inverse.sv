@@ -20,7 +20,8 @@ module ntt_inverse #(
     parameter int N              = 256,   // NTT size
     parameter int WIDTH          = 32,    // Data width
     parameter int Q              = 8380417,  // Modulus
-    parameter int ADDR_WIDTH     = 8,        // log₂(N)
+    parameter int PSI_INV        = 4231948,  // Inverse primitive 2N-th root of unity
+    parameter int ADDR_WIDTH     = $clog2(N),        // log₂(N)
     parameter int REDUCTION_TYPE = 0,        // 0=Simple, 1=Barrett, 2=Montgomery
     parameter int N_INV          = 8347681,  // N^(-1) mod Q = 256^(-1) mod 8380417
     parameter int PARALLEL       = 8,        // Butterflies per cycle
@@ -70,7 +71,7 @@ module ntt_inverse #(
   logic [PARALLEL-1:0] lane_valid;
 
   // Banked coefficient storage
-  localparam int BANKS = PARALLEL * 3;
+  localparam int BANKS = (N < (PARALLEL * 2)) ? N : (PARALLEL * 2);
   localparam int BANK_DEPTH = (N + BANKS - 1) / BANKS;
   localparam int BANK_ADDR_WIDTH = $clog2(BANKS);
   localparam int BANK_DEPTH_WIDTH = $clog2(BANK_DEPTH);
@@ -96,11 +97,33 @@ module ntt_inverse #(
   logic [PARALLEL-1:0] lane_valid_pipe[0:MULT_PIPELINE];
 
   // Twiddle and butterfly signals
-  logic [PARALLEL-1:0][WIDTH-1:0] twiddle_raw;
   logic [PARALLEL-1:0][WIDTH-1:0] a_in;
   logic [PARALLEL-1:0][WIDTH-1:0] b_in;
+  logic [PARALLEL-1:0][WIDTH-1:0] twiddle;
   logic [PARALLEL-1:0][WIDTH-1:0] a_out;
   logic [PARALLEL-1:0][WIDTH-1:0] b_out;
+
+  localparam int TWIDDLE_DEPTH = N;
+  localparam int MULT_LATENCY = (MULT_PIPELINE == 0) ? 1 : (MULT_PIPELINE + 1);
+
+  logic [WIDTH-1:0] twiddle_table[0:TWIDDLE_DEPTH-1];
+
+  typedef enum logic [1:0] {
+    TW_IDLE = 2'b00,
+    TW_TABLE = 2'b01,
+    TW_READY = 2'b10
+  } tw_state_t;
+
+  tw_state_t tw_state;
+  logic tw_ready;
+  logic [ADDR_WIDTH-1:0] tw_index;
+  logic [WIDTH-1:0] tw_mul_a;
+  logic [WIDTH-1:0] tw_mul_b;
+  logic [WIDTH-1:0] tw_mul_result;
+  logic [ADDR_WIDTH-1:0] tw_mul_count;
+  logic tw_mul_start;
+  logic tw_mul_done;
+  logic twiddle_stall;
 
   // Scaling logic (needs 9 bits to reach N=256)
   localparam int SCALE_LATENCY = 0;
@@ -200,16 +223,17 @@ module ntt_inverse #(
   // Memory Interface
   //============================================================================
 
+
+  function automatic [BANK_ADDR_WIDTH-1:0] bank_sel(input logic [ADDR_WIDTH-1:0] addr);
+    return addr % BANKS;
+  endfunction
+
   function automatic [ADDR_WIDTH-1:0] bit_reverse(input logic [ADDR_WIDTH-1:0] value);
     automatic logic [ADDR_WIDTH-1:0] reversed;
     for (int i = 0; i < ADDR_WIDTH; i++) begin
       reversed[i] = value[ADDR_WIDTH - 1 - i];
     end
     return reversed;
-  endfunction
-
-  function automatic [BANK_ADDR_WIDTH-1:0] bank_sel(input logic [ADDR_WIDTH-1:0] addr);
-    return addr % BANKS;
   endfunction
 
   function automatic [BANK_DEPTH_WIDTH-1:0] bank_index(input logic [ADDR_WIDTH-1:0] addr);
@@ -270,6 +294,7 @@ module ntt_inverse #(
     for (int lane = 0; lane < PARALLEL; lane++) begin
       a_in[lane] = mem_bank[addr0_bank[lane]][addr0_index[lane]];
       b_in[lane] = mem_bank[addr1_bank[lane]][addr1_index[lane]];
+      twiddle[lane] = twiddle_table[twiddle_addr[lane]];
     end
   end
 
@@ -301,15 +326,91 @@ module ntt_inverse #(
     end
   end
 
-  // Twiddle ROM + butterfly per lane
+  mod_mult #(
+      .WIDTH         (WIDTH),
+      .Q             (Q),
+      .REDUCTION_TYPE(REDUCTION_TYPE),
+      .PIPELINE_STAGES(MULT_PIPELINE)
+  ) u_twiddle_mult (
+      .clk   (clk),
+      .rst_n (rst_n),
+      .a     (tw_mul_a),
+      .b     (tw_mul_b),
+      .result(tw_mul_result)
+  );
+
+  assign twiddle_stall = !tw_ready;
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      tw_mul_count <= '0;
+    end else if (tw_mul_start) begin
+      tw_mul_count <= MULT_LATENCY[ADDR_WIDTH-1:0];
+    end else if (tw_mul_count != 0) begin
+      tw_mul_count <= tw_mul_count - 1'b1;
+    end
+  end
+
+  assign tw_mul_done = (tw_mul_count == 1);
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      for (int i = 0; i < TWIDDLE_DEPTH; i++) begin
+        twiddle_table[i] <= '0;
+      end
+      twiddle_table[0] <= {{(WIDTH-1){1'b0}}, 1'b1};
+    end else if (!tw_ready) begin
+      if (tw_state == TW_IDLE) begin
+        twiddle_table[0] <= {{(WIDTH-1){1'b0}}, 1'b1};
+      end else if (tw_state == TW_TABLE && tw_mul_done) begin
+        twiddle_table[tw_index] <= tw_mul_result;
+      end
+    end
+  end
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      tw_state <= TW_IDLE;
+      tw_ready <= 1'b0;
+      tw_index <= '0;
+      tw_mul_start <= 1'b0;
+      tw_mul_a <= '0;
+      tw_mul_b <= '0;
+    end else begin
+      tw_mul_start <= 1'b0;
+      if (!tw_ready) begin
+        if (tw_state == TW_IDLE) begin
+          if (TWIDDLE_DEPTH == 1) begin
+            tw_state <= TW_READY;
+            tw_ready <= 1'b1;
+          end else begin
+            tw_state <= TW_TABLE;
+            tw_index <= 1;
+            tw_mul_a <= {{(WIDTH-1){1'b0}}, 1'b1};
+            tw_mul_b <= WIDTH'(PSI_INV);
+            tw_mul_start <= 1'b1;
+          end
+        end else if (tw_state == TW_TABLE) begin
+          if (tw_mul_done) begin
+            if (tw_index == (TWIDDLE_DEPTH - 1)) begin
+              tw_state <= TW_READY;
+              tw_ready <= 1'b1;
+            end else begin
+              tw_index <= tw_index + 1'b1;
+              tw_mul_a <= tw_mul_result;
+              tw_mul_b <= WIDTH'(PSI_INV);
+              tw_mul_start <= 1'b1;
+            end
+          end
+        end
+      end
+    end
+  end
+
+  // Twiddle + butterfly per lane
   genvar lane;
   generate
     for (lane = 0; lane < PARALLEL; lane++) begin : gen_inv_butterflies
-      inverse_twiddle_rom u_inverse_twiddle_rom (
-          .addr   (twiddle_addr[lane]),
-          .twiddle(twiddle_raw[lane])
-      );
-
       ntt_butterfly_inverse #(
           .WIDTH         (WIDTH),
           .Q             (Q),
@@ -320,7 +421,7 @@ module ntt_inverse #(
           .rst_n  (rst_n),
           .a      (a_in[lane]),
           .b      (b_in[lane]),
-          .twiddle(twiddle_raw[lane]),
+          .twiddle(twiddle[lane]),
           .a_out  (a_out[lane]),
           .b_out  (b_out[lane])
       );
@@ -378,6 +479,7 @@ module ntt_inverse #(
       .clk        (clk),
       .rst_n      (rst_n),
       .start      (intt_start),
+      .stall      (twiddle_stall),
       .done       (intt_done),
       .busy       (intt_busy),
       .stage      (stage),

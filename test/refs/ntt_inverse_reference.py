@@ -17,6 +17,7 @@ except ImportError:
 
 def mod_inv(a, mod):
     """Modular inverse using extended Euclidean algorithm"""
+
     def extended_gcd(a, b):
         if a == 0:
             return b, 0, 1
@@ -42,51 +43,51 @@ def mod_exp(base, exp, mod):
         base = (base * base) % mod
     return result
 
+
 def ntt_inverse_reference(coeffs, N=N, q=Q, psi=PSI):
     """
     Fast Inverse NTT using Gentleman-Sande with ψ^(-1) twiddles
-    
+
     Input: Bit-Reversed Order (BO) - output from forward NTT
     Output: Normal Order (NO)
-    
+
     This matches the working reference implementation.
     """
     n = len(coeffs)
     if n != N:
         raise ValueError(f"Input must have {N} coefficients, got {n}")
-    
+
     result = np.array(coeffs, dtype=object)
-    
+
     psi_inv = mod_inv(psi, q)
     brv = bit_reverse_order(N)
-    
-    t = N // 2     # Number of blocks (starts high, decreases)
-    m = 1          # Stride (starts low, increases)
-    
+
+    t = N // 2  # Number of blocks (starts high, decreases)
+    m = 1  # Stride (starts low, increases)
+
     while m < N:
         for k in range(t):
             # Twiddle factor W = ψ^(-p) using bit-reversed index
             p = brv[t + k]
             W = pow(int(psi_inv), int(p), q)
-            
+
             for j in range(m):
                 idx1 = 2 * m * k + j
                 idx2 = idx1 + m
-                
+
                 u = result[idx1]
                 v = result[idx2]
-                
+
                 # Gentleman-Sande butterfly: (A+B, (A-B)×W)
                 result[idx1] = (u + v) % q
                 diff = (u - v) % q
                 result[idx2] = (diff * W) % q
-        
+
         t //= 2
         m *= 2
-    
+
     # Final scaling by N^(-1)
     n_inv = mod_inv(N, q)
     result = (result * n_inv) % q
-    
-    return result.astype(np.int64).tolist()
 
+    return result.astype(np.int64).tolist()

@@ -35,6 +35,7 @@ async def test_idle_to_done(dut):
 
     dut.rst_n.value = 0
     dut.start.value = 0
+    dut.stall.value = 0
     await RisingEdge(dut.clk)
     await RisingEdge(dut.clk)
     dut.rst_n.value = 1
@@ -67,6 +68,7 @@ async def test_stage_and_cycle_progression(dut):
 
     dut.rst_n.value = 0
     dut.start.value = 0
+    dut.stall.value = 0
     await RisingEdge(dut.clk)
     dut.rst_n.value = 1
     dut.start.value = 1
@@ -83,8 +85,12 @@ async def test_stage_and_cycle_progression(dut):
         cycle_val = int(dut.cycle.value)
 
         exp_stage, exp_cycle = expected_stage_cycle(cycle)
-        assert stage_val == exp_stage, f"Stage mismatch at cycle {cycle}: {stage_val} != {exp_stage}"
-        assert cycle_val == exp_cycle, f"Cycle mismatch at cycle {cycle}: {cycle_val} != {exp_cycle}"
+        assert stage_val == exp_stage, (
+            f"Stage mismatch at cycle {cycle}: {stage_val} != {exp_stage}"
+        )
+        assert cycle_val == exp_cycle, (
+            f"Cycle mismatch at cycle {cycle}: {cycle_val} != {exp_cycle}"
+        )
 
         await RisingEdge(dut.clk)
 
@@ -99,6 +105,7 @@ async def test_lane_valid_mask(dut):
 
     dut.rst_n.value = 0
     dut.start.value = 0
+    dut.stall.value = 0
     await RisingEdge(dut.clk)
     dut.rst_n.value = 1
     dut.start.value = 1

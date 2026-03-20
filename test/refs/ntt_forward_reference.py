@@ -10,8 +10,9 @@ import numpy as np
 # NTT Parameters
 N = 256
 Q = 8380417
-PSI = 1239911      # Primitive 2N-th root (ψ^512 ≡ 1, ψ^256 ≡ -1)
-OMEGA = 169688     # ω = ψ² (primitive N-th root)
+PSI = 1239911  # Primitive 2N-th root (ψ^512 ≡ 1, ψ^256 ≡ -1)
+OMEGA = 169688  # ω = ψ² (primitive N-th root)
+
 
 def mod_exp(base, exp, mod):
     """Modular exponentiation"""
@@ -24,6 +25,7 @@ def mod_exp(base, exp, mod):
         base = (base * base) % mod
     return result
 
+
 def bit_reverse_order(n):
     """Generate bit-reversed indices for size n"""
     width = n.bit_length() - 1
@@ -33,6 +35,7 @@ def bit_reverse_order(n):
         binary = bin(i)[2:].zfill(width)
         reversed_indices[i] = int(binary[::-1], 2)
     return reversed_indices
+
 
 def ntt_forward_reference(coeffs, N=N, q=Q, psi=PSI):
     """
@@ -69,4 +72,3 @@ def ntt_forward_reference(coeffs, N=N, q=Q, psi=PSI):
         m //= 2
 
     return result.astype(np.int64).tolist()
-

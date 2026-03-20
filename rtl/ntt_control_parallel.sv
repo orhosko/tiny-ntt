@@ -14,6 +14,7 @@ module ntt_control_parallel #(
     input  logic rst_n,
 
     input  logic start,
+    input  logic stall,
     output logic done,
     output logic busy,
 
@@ -87,7 +88,7 @@ module ntt_control_parallel #(
         end
       end
       COMPUTE: begin
-        if (stage <= LAST_STAGE) begin
+        if (!stall && stage <= LAST_STAGE) begin
           if (cycle == CYCLES_PER_STAGE - 1) begin
             cycle_next = '0;
             if (stage < LAST_STAGE) begin
@@ -122,7 +123,8 @@ module ntt_control_parallel #(
     for (int lane = 0; lane < PARALLEL; lane++) begin
       lane_valid[lane] = ((butterfly + lane) < TOTAL_BUTTERFLIES)
                          && (state == COMPUTE)
-                         && (stage <= LAST_STAGE);
+                         && (stage <= LAST_STAGE)
+                         && !stall;
     end
   end
 

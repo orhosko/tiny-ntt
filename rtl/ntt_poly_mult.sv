@@ -29,12 +29,22 @@ module ntt_poly_mult #(
     input  logic start,
     output logic done,
     output logic busy,
+    output logic [3:0] debug_state,
+    output logic fwd_done,
+    output logic inv_done,
+    output logic fwd_started,
+    output logic inv_started,
 
     // Load interface
     input  logic                  load_coeff,
     input  logic                  load_sel,   // 0 = A, 1 = B
     input  logic [ADDR_WIDTH-1:0] load_addr,
     input  logic [     WIDTH-1:0] load_data,
+
+    // Debug read interface (A/B memory)
+    input  logic                  debug_read_sel,
+    input  logic [ADDR_WIDTH-1:0] debug_read_addr,
+    output logic [     WIDTH-1:0] debug_read_data,
 
     // Read interface (result)
     input  logic [ADDR_WIDTH-1:0] read_addr,
@@ -60,6 +70,8 @@ module ntt_poly_mult #(
 
   state_t state, next_state;
 
+  assign debug_state = state;
+
   // Local coefficient storage
   logic [WIDTH-1:0] a_mem[0:N-1];
   logic [WIDTH-1:0] b_mem[0:N-1];
@@ -77,7 +89,6 @@ module ntt_poly_mult #(
 
   // Forward NTT interface
   logic fwd_start;
-  logic fwd_done;
   logic fwd_busy;
   logic fwd_load;
   logic [ADDR_WIDTH-1:0] fwd_load_addr;
@@ -87,7 +98,6 @@ module ntt_poly_mult #(
 
   // Inverse NTT interface
   logic inv_start;
-  logic inv_done;
   logic inv_busy;
   logic inv_load;
   logic [ADDR_WIDTH-1:0] inv_load_addr;
@@ -103,8 +113,6 @@ module ntt_poly_mult #(
   logic [READ_COUNT_WIDTH-1:0] mul_index_pipe[0:MULT_PIPELINE];
   logic [MULT_PIPELINE:0] mul_valid_pipe;
 
-  logic fwd_started;
-  logic inv_started;
   logic clear_ntt;
 
   // Pointwise multiplier
@@ -336,53 +344,52 @@ module ntt_poly_mult #(
   //==============================================================================
   // NTT coefficient storage
   //==============================================================================
-  always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-      for (int i = 0; i < N; i++) begin
-        a_ntt[i] <= '0;
-        b_ntt[i] <= '0;
-        c_ntt[i] <= '0;
-      end
-    end else if (clear_ntt) begin
-      for (int i = 0; i < N; i++) begin
-        a_ntt[i] <= '0;
-        b_ntt[i] <= '0;
-        c_ntt[i] <= '0;
-      end
-    end else begin
-      case (state)
-        READ_A: begin
-          if (read_pending) begin
-            a_ntt[read_index - 1] <= fwd_read_data;
-          end
-        end
-        READ_B: begin
-          if (read_pending) begin
-            b_ntt[read_index - 1] <= fwd_read_data;
-          end
-        end
-        POINTWISE: begin
-          if (POINTWISE_PARALLEL) begin
-            if (point_index == MULT_PIPELINE[READ_COUNT_WIDTH-1:0]) begin
-              for (int i = 0; i < N; i++) begin
-                c_ntt[i] <= c_ntt_parallel[i];
+  generate
+    for (genvar i = 0; i < N; i++) begin : gen_ntt_storage
+      always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+          a_ntt[i] <= '0;
+          b_ntt[i] <= '0;
+          c_ntt[i] <= '0;
+        end else if (clear_ntt) begin
+          a_ntt[i] <= '0;
+          b_ntt[i] <= '0;
+          c_ntt[i] <= '0;
+        end else begin
+          case (state)
+            READ_A: begin
+              if (read_pending && (read_index - 1'b1) == READ_COUNT_WIDTH'(i)) begin
+                a_ntt[i] <= fwd_read_data;
               end
             end
-          end else begin
-            if (MULT_PIPELINE == 0) begin
-              if (point_index < N) begin
-                c_ntt[point_index] <= mul_result;
+            READ_B: begin
+              if (read_pending && (read_index - 1'b1) == READ_COUNT_WIDTH'(i)) begin
+                b_ntt[i] <= fwd_read_data;
               end
-            end else if (mul_valid_pipe[MULT_PIPELINE]) begin
-              c_ntt[mul_index_pipe[MULT_PIPELINE]] <= mul_result;
             end
-          end
+            POINTWISE: begin
+              if (POINTWISE_PARALLEL) begin
+                if (point_index == MULT_PIPELINE[READ_COUNT_WIDTH-1:0]) begin
+                  c_ntt[i] <= c_ntt_parallel[i];
+                end
+              end else begin
+                if (MULT_PIPELINE == 0) begin
+                  if (point_index < N && point_index == READ_COUNT_WIDTH'(i)) begin
+                    c_ntt[i] <= mul_result;
+                  end
+                end else if (mul_valid_pipe[MULT_PIPELINE]
+                             && mul_index_pipe[MULT_PIPELINE] == READ_COUNT_WIDTH'(i)) begin
+                  c_ntt[i] <= mul_result;
+                end
+              end
+            end
+            default: begin
+            end
+          endcase
         end
-        default: begin
-        end
-      endcase
+      end
     end
-  end
+  endgenerate
 
   always_comb begin
     next_state = state;
@@ -467,5 +474,7 @@ module ntt_poly_mult #(
 
   assign inv_read_addr = (state == DONE_STATE || state == IDLE) ? read_addr : '0;
   assign read_data = inv_read_data;
+
+  assign debug_read_data = debug_read_sel ? b_mem[debug_read_addr] : a_mem[debug_read_addr];
 
 endmodule

@@ -168,20 +168,27 @@ module ntt_forward #(
 
   assign tw_mul_done = (tw_mul_count == 1);
 
-  always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-      for (int i = 0; i < TWIDDLE_DEPTH; i++) begin
-        twiddle_table[i] <= '0;
-      end
-      twiddle_table[0] <= {{(WIDTH-1){1'b0}}, 1'b1};
-    end else if (!tw_ready) begin
-      if (tw_state == TW_IDLE) begin
-        twiddle_table[0] <= {{(WIDTH-1){1'b0}}, 1'b1};
-      end else if (tw_state == TW_TABLE && tw_mul_done) begin
-        twiddle_table[tw_index] <= tw_mul_result;
+  generate
+    for (genvar i = 0; i < TWIDDLE_DEPTH; i++) begin : gen_twiddle_table
+      always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+          if (i == 0) begin
+            twiddle_table[i] <= {{(WIDTH-1){1'b0}}, 1'b1};
+          end else begin
+            twiddle_table[i] <= '0;
+          end
+        end else if (!tw_ready) begin
+          if (tw_state == TW_IDLE) begin
+            if (i == 0) begin
+              twiddle_table[i] <= {{(WIDTH-1){1'b0}}, 1'b1};
+            end
+          end else if (tw_state == TW_TABLE && tw_mul_done && tw_index == ADDR_WIDTH'(i)) begin
+            twiddle_table[i] <= tw_mul_result;
+          end
+        end
       end
     end
-  end
+  endgenerate
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin

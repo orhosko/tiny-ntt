@@ -214,19 +214,18 @@ async def test_load_and_read(dut):
     # Read back
     results = await read_coefficients(dut)
 
-    # Verify
+    # Verify (bit-reversed storage in CG flow)
     mismatches = 0
     for i in range(N):
-        if results[i] != test_data[i]:
-            dut._log.error(
-                f"  Mismatch at {i}: got {results[i]}, expected {test_data[i]}"
-            )
+        expected = test_data[bit_reverse(i, LOGN)]
+        if results[i] != expected:
+            dut._log.error(f"  Mismatch at {i}: got {results[i]}, expected {expected}")
             mismatches += 1
             if mismatches > 10:  # Limit error output
                 break
 
     assert mismatches == 0, f"Load/read test failed with {mismatches} mismatches"
-    dut._log.info("✓ Load and read interface works")
+    dut._log.info("✓ Load and read interface works (bit-reversed)")
 
 
 @cocotb.test()

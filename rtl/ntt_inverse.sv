@@ -76,12 +76,10 @@ module ntt_inverse #(
   localparam int BANK_ADDR_WIDTH = $clog2(BANKS);
   localparam int BANK_DEPTH_WIDTH = $clog2(BANK_DEPTH);
 
-  logic [WIDTH-1:0] mem_bank[0:BANKS-1][0:BANK_DEPTH-1];
+  logic [WIDTH-1:0] mem_bank_a[0:BANKS-1][0:BANK_DEPTH-1];
+  logic [WIDTH-1:0] mem_bank_b[0:BANKS-1][0:BANK_DEPTH-1];
 
   // Address generation
-  logic [ADDR_WIDTH-1:0] half_block;
-  logic [ADDR_WIDTH-1:0] block_size;
-  logic [ADDR_WIDTH-1:0] twiddle_input;
   logic [PARALLEL-1:0][ADDR_WIDTH-1:0] addr0;
   logic [PARALLEL-1:0][ADDR_WIDTH-1:0] addr1;
   logic [PARALLEL-1:0][ADDR_WIDTH-1:0] twiddle_addr;
@@ -89,12 +87,26 @@ module ntt_inverse #(
   logic [PARALLEL-1:0][BANK_ADDR_WIDTH-1:0] addr1_bank;
   logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr0_index;
   logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr1_index;
+  logic [PARALLEL-1:0][ADDR_WIDTH-1:0] addr0_out;
+  logic [PARALLEL-1:0][ADDR_WIDTH-1:0] addr1_out;
+  logic [PARALLEL-1:0][BANK_ADDR_WIDTH-1:0] addr0_out_bank;
+  logic [PARALLEL-1:0][BANK_ADDR_WIDTH-1:0] addr1_out_bank;
+  logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr0_out_index;
+  logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr1_out_index;
 
   logic [PARALLEL-1:0][BANK_ADDR_WIDTH-1:0] addr0_bank_pipe[0:MULT_PIPELINE];
   logic [PARALLEL-1:0][BANK_ADDR_WIDTH-1:0] addr1_bank_pipe[0:MULT_PIPELINE];
   logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr0_index_pipe[0:MULT_PIPELINE];
   logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr1_index_pipe[0:MULT_PIPELINE];
+  logic [PARALLEL-1:0][BANK_ADDR_WIDTH-1:0] addr0_out_bank_pipe[0:MULT_PIPELINE];
+  logic [PARALLEL-1:0][BANK_ADDR_WIDTH-1:0] addr1_out_bank_pipe[0:MULT_PIPELINE];
+  logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr0_out_index_pipe[0:MULT_PIPELINE];
+  logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr1_out_index_pipe[0:MULT_PIPELINE];
   logic [PARALLEL-1:0] lane_valid_pipe[0:MULT_PIPELINE];
+  logic read_bank_sel;
+  logic write_bank_sel;
+  logic write_bank_sel_pipe[0:MULT_PIPELINE];
+  localparam int OUTPUT_BANK = (LOGN % 2 == 0) ? 0 : 1;
 
   // Twiddle and butterfly signals
   logic [PARALLEL-1:0][WIDTH-1:0] a_in;
@@ -248,35 +260,54 @@ module ntt_inverse #(
 
   // Read interface (synchronous)
   always_ff @(posedge clk) begin
-    read_data <= mem_bank[bank_sel(read_addr)][bank_index(read_addr)];
+    if (OUTPUT_BANK == 0) begin
+      read_data <= mem_bank_a[bank_sel(read_addr)][bank_index(read_addr)];
+    end else begin
+      read_data <= mem_bank_b[bank_sel(read_addr)][bank_index(read_addr)];
+    end
   end
 
-  // Address generation for each lane
+  assign read_bank_sel = stage[0];
+  assign write_bank_sel = ~stage[0];
+
+  // Address generation for each lane (Constant-Geometry)
   always_comb begin
-    half_block = ADDR_WIDTH'(1 << stage);
-    block_size = ADDR_WIDTH'(1 << (stage + 1));
+    int unsigned block_size_int;
+
+    block_size_int = N >> stage;
 
     for (int lane = 0; lane < PARALLEL; lane++) begin
       int unsigned butterfly_idx;
       int unsigned group;
-      int unsigned position;
+      int unsigned addr0_int;
+      int unsigned addr1_int;
+      int unsigned twiddle_exp;
 
       butterfly_idx = butterfly_base + lane;
 
       if (lane_valid[lane]) begin
-        group = butterfly_idx >> stage;
-        position = butterfly_idx & (half_block - 1);
+        group = butterfly_idx >> (LOGN - stage - 1);
 
-        addr0[lane] = ADDR_WIDTH'(group * block_size + position);
-        addr1[lane] = addr0[lane] + half_block;
+        addr0_int = 2 * butterfly_idx;
+        addr1_int = addr0_int + 1;
+
+        addr0[lane] = ADDR_WIDTH'(addr0_int);
+        addr1[lane] = ADDR_WIDTH'(addr1_int);
 
         addr0_bank[lane] = bank_sel(addr0[lane]);
         addr1_bank[lane] = bank_sel(addr1[lane]);
         addr0_index[lane] = bank_index(addr0[lane]);
         addr1_index[lane] = bank_index(addr1[lane]);
 
-        twiddle_input = ADDR_WIDTH'(1 << (LOGN - stage - 1)) + group;
-        twiddle_addr[lane] = bit_reverse(twiddle_input);
+        addr0_out[lane] = ADDR_WIDTH'(butterfly_idx);
+        addr1_out[lane] = ADDR_WIDTH'(butterfly_idx + (N >> 1));
+        addr0_out_bank[lane] = bank_sel(addr0_out[lane]);
+        addr1_out_bank[lane] = bank_sel(addr1_out[lane]);
+        addr0_out_index[lane] = bank_index(addr0_out[lane]);
+        addr1_out_index[lane] = bank_index(addr1_out[lane]);
+
+        twiddle_exp = block_size_int * group;
+        twiddle_addr[lane] = ADDR_WIDTH'(twiddle_exp);
       end else begin
         addr0[lane] = '0;
         addr1[lane] = '0;
@@ -284,6 +315,12 @@ module ntt_inverse #(
         addr1_bank[lane] = '0;
         addr0_index[lane] = '0;
         addr1_index[lane] = '0;
+        addr0_out[lane] = '0;
+        addr1_out[lane] = '0;
+        addr0_out_bank[lane] = '0;
+        addr1_out_bank[lane] = '0;
+        addr0_out_index[lane] = '0;
+        addr1_out_index[lane] = '0;
         twiddle_addr[lane] = '0;
       end
     end
@@ -292,8 +329,13 @@ module ntt_inverse #(
   // Combinational reads
   always_comb begin
     for (int lane = 0; lane < PARALLEL; lane++) begin
-      a_in[lane] = mem_bank[addr0_bank[lane]][addr0_index[lane]];
-      b_in[lane] = mem_bank[addr1_bank[lane]][addr1_index[lane]];
+      if (read_bank_sel) begin
+        a_in[lane] = mem_bank_b[addr0_bank[lane]][addr0_index[lane]];
+        b_in[lane] = mem_bank_b[addr1_bank[lane]][addr1_index[lane]];
+      end else begin
+        a_in[lane] = mem_bank_a[addr0_bank[lane]][addr0_index[lane]];
+        b_in[lane] = mem_bank_a[addr1_bank[lane]][addr1_index[lane]];
+      end
       twiddle[lane] = twiddle_table[twiddle_addr[lane]];
     end
   end
@@ -307,7 +349,12 @@ module ntt_inverse #(
           addr1_bank_pipe[stage_idx][lane_idx] <= '0;
           addr0_index_pipe[stage_idx][lane_idx] <= '0;
           addr1_index_pipe[stage_idx][lane_idx] <= '0;
+          addr0_out_bank_pipe[stage_idx][lane_idx] <= '0;
+          addr1_out_bank_pipe[stage_idx][lane_idx] <= '0;
+          addr0_out_index_pipe[stage_idx][lane_idx] <= '0;
+          addr1_out_index_pipe[stage_idx][lane_idx] <= '0;
           lane_valid_pipe[stage_idx][lane_idx] <= 1'b0;
+          write_bank_sel_pipe[stage_idx] <= 1'b0;
         end
       end
     end else begin
@@ -315,13 +362,23 @@ module ntt_inverse #(
       addr1_bank_pipe[0] <= addr1_bank;
       addr0_index_pipe[0] <= addr0_index;
       addr1_index_pipe[0] <= addr1_index;
+      addr0_out_bank_pipe[0] <= addr0_out_bank;
+      addr1_out_bank_pipe[0] <= addr1_out_bank;
+      addr0_out_index_pipe[0] <= addr0_out_index;
+      addr1_out_index_pipe[0] <= addr1_out_index;
       lane_valid_pipe[0] <= lane_valid;
+      write_bank_sel_pipe[0] <= write_bank_sel;
       for (int stage_idx = 1; stage_idx <= MULT_PIPELINE; stage_idx++) begin
         addr0_bank_pipe[stage_idx] <= addr0_bank_pipe[stage_idx - 1];
         addr1_bank_pipe[stage_idx] <= addr1_bank_pipe[stage_idx - 1];
         addr0_index_pipe[stage_idx] <= addr0_index_pipe[stage_idx - 1];
         addr1_index_pipe[stage_idx] <= addr1_index_pipe[stage_idx - 1];
+        addr0_out_bank_pipe[stage_idx] <= addr0_out_bank_pipe[stage_idx - 1];
+        addr1_out_bank_pipe[stage_idx] <= addr1_out_bank_pipe[stage_idx - 1];
+        addr0_out_index_pipe[stage_idx] <= addr0_out_index_pipe[stage_idx - 1];
+        addr1_out_index_pipe[stage_idx] <= addr1_out_index_pipe[stage_idx - 1];
         lane_valid_pipe[stage_idx] <= lane_valid_pipe[stage_idx - 1];
+        write_bank_sel_pipe[stage_idx] <= write_bank_sel_pipe[stage_idx - 1];
       end
     end
   end
@@ -418,7 +475,7 @@ module ntt_inverse #(
   genvar lane;
   generate
     for (lane = 0; lane < PARALLEL; lane++) begin : gen_inv_butterflies
-      ntt_butterfly_inverse #(
+      ntt_butterfly #(
           .WIDTH         (WIDTH),
           .Q             (Q),
           .REDUCTION_TYPE(REDUCTION_TYPE),
@@ -438,19 +495,31 @@ module ntt_inverse #(
   // Write-back results / load coefficients
   always_ff @(posedge clk) begin
     if (load_coeff && state == IDLE) begin
-      mem_bank[bank_sel(load_addr)][bank_index(load_addr)] <= load_data;
+      mem_bank_a[bank_sel(bit_reverse(load_addr))][bank_index(bit_reverse(load_addr))] <= load_data;
     end else if (state == INTT_COMPUTE) begin
       for (int lane_idx = 0; lane_idx < PARALLEL; lane_idx++) begin
         if (lane_valid_pipe[MULT_PIPELINE][lane_idx]) begin
-          mem_bank[addr0_bank_pipe[MULT_PIPELINE][lane_idx]]
-              [addr0_index_pipe[MULT_PIPELINE][lane_idx]] <= a_out[lane_idx];
-          mem_bank[addr1_bank_pipe[MULT_PIPELINE][lane_idx]]
-              [addr1_index_pipe[MULT_PIPELINE][lane_idx]] <= b_out[lane_idx];
+          if (write_bank_sel_pipe[MULT_PIPELINE]) begin
+            mem_bank_b[addr0_out_bank_pipe[MULT_PIPELINE][lane_idx]]
+                [addr0_out_index_pipe[MULT_PIPELINE][lane_idx]] <= a_out[lane_idx];
+            mem_bank_b[addr1_out_bank_pipe[MULT_PIPELINE][lane_idx]]
+                [addr1_out_index_pipe[MULT_PIPELINE][lane_idx]] <= b_out[lane_idx];
+          end else begin
+            mem_bank_a[addr0_out_bank_pipe[MULT_PIPELINE][lane_idx]]
+                [addr0_out_index_pipe[MULT_PIPELINE][lane_idx]] <= a_out[lane_idx];
+            mem_bank_a[addr1_out_bank_pipe[MULT_PIPELINE][lane_idx]]
+                [addr1_out_index_pipe[MULT_PIPELINE][lane_idx]] <= b_out[lane_idx];
+          end
         end
       end
     end else if (state == SCALE && scale_valid_pipe[MULT_PIPELINE]) begin
-      mem_bank[bank_sel(scale_addr_pipe[MULT_PIPELINE][ADDR_WIDTH-1:0])]
-          [bank_index(scale_addr_pipe[MULT_PIPELINE][ADDR_WIDTH-1:0])] <= scale_result;
+      if (OUTPUT_BANK == 0) begin
+        mem_bank_a[bank_sel(scale_addr_pipe[MULT_PIPELINE][ADDR_WIDTH-1:0])]
+            [bank_index(scale_addr_pipe[MULT_PIPELINE][ADDR_WIDTH-1:0])] <= scale_result;
+      end else begin
+        mem_bank_b[bank_sel(scale_addr_pipe[MULT_PIPELINE][ADDR_WIDTH-1:0])]
+            [bank_index(scale_addr_pipe[MULT_PIPELINE][ADDR_WIDTH-1:0])] <= scale_result;
+      end
     end
   end
 
@@ -465,6 +534,11 @@ module ntt_inverse #(
 
 
   // Modular multiplication for scaling
+  logic [WIDTH-1:0] scale_read_data;
+  assign scale_read_data = (OUTPUT_BANK == 0)
+                               ? mem_bank_a[bank_sel(scale_read_addr)][bank_index(scale_read_addr)]
+                               : mem_bank_b[bank_sel(scale_read_addr)][bank_index(scale_read_addr)];
+
   mod_mult #(
       .WIDTH         (WIDTH),
       .Q             (Q),
@@ -473,7 +547,7 @@ module ntt_inverse #(
   ) scale_mult (
       .clk   (clk),
       .rst_n (rst_n),
-      .a     (mem_bank[bank_sel(scale_read_addr)][bank_index(scale_read_addr)]),
+      .a     (scale_read_data),
       .b     (scaling_factor),
       .result(scale_result)
   );

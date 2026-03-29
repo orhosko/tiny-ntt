@@ -1,28 +1,36 @@
 #!/usr/bin/env python3
 """
-Generate inverse twiddle factors for N=256 NWC NTT
-ψ^(-k) mod q for k = 0, 1, 2, ..., 255
+Inverse Twiddle Factor Generator for Inverse NWC NTT
 
-For inverse NTT, we need the inverse of the primitive root:
-ψ = 1239911 (primitive 512th root of unity mod 8380417)
-ψ^(-1) = modinv(ψ, 8380417)
+Generates inverse twiddle factors: psi^(-k) mod q for k = 0, 1, ..., n-1
+where psi^(-1) is the modular inverse of psi.
 
-Then compute: ψ^(-k) = (ψ^(-1))^k mod q
+Outputs:
+  - Hex file for BRAM initialization ($readmemh)
+  - SystemVerilog ROM (optional, for reference/comparison)
+
+Parameters (default for Dilithium):
+  N = 256 (or 4096 for larger NTT)
+  Q = 8380417
+  psi = 1239911
+
+Usage:
+  python generate_inverse_twiddles.py [--n N] [--output-dir DIR]
 """
 
-def mod_exp(base, exp, mod):
-    """Modular exponentiation: base^exp mod mod"""
-    result = 1
-    base = base % mod
-    while exp > 0:
-        if exp % 2 == 1:
-            result = (result * base) % mod
-        exp = exp >> 1
-        base = (base * base) % mod
-    return result
+import argparse
+from pathlib import Path
+
+
+# Default NTT Parameters (Dilithium)
+DEFAULT_N = 256
+DEFAULT_Q = 8380417
+DEFAULT_PSI = 1239911
+
 
 def mod_inv(a, mod):
-    """Modular inverse using extended Euclidean algorithm"""
+    """Compute modular inverse using extended Euclidean algorithm"""
+
     def extended_gcd(a, b):
         if a == 0:
             return b, 0, 1
@@ -30,123 +38,192 @@ def mod_inv(a, mod):
         x = y1 - (b // a) * x1
         y = x1
         return gcd, x, y
-    
+
     gcd, x, _ = extended_gcd(a % mod, mod)
     if gcd != 1:
         raise ValueError(f"{a} has no inverse mod {mod}")
     return (x % mod + mod) % mod
 
-def generate_inverse_twiddles(N=256, q=8380417, psi=1239911):
+
+def compute_inverse_twiddles(n, q, psi):
     """
-    Generate all inverse twiddle factors for inverse NTT
-    
+    Compute all inverse twiddle factors: psi^(-k) mod q for k = 0, 1, ..., n-1
+
     Args:
-        N: NTT size (must be power of 2)
+        n: NTT size
         q: Modulus (prime)
         psi: Primitive 2N-th root of unity mod q
-    
-    Returns:
-        List of N inverse twiddle factors
-    """
-    # Compute ψ^(-1)
-    psi_inv = mod_inv(psi, q)
-    
-    print(f"Generating inverse twiddle factors for N={N}, q={q}")
-    print(f"ψ = {psi}")
-    print(f"ψ^(-1) = {psi_inv}")
-    print()
-    
-    # Verify ψ × ψ^(-1) ≡ 1 (mod q)
-    check = (psi * psi_inv) % q
-    assert check == 1, f"Inverse check failed: {psi} × {psi_inv} = {check} (mod {q})"
-    print(f"✓ Verified: {psi} × {psi_inv} ≡ 1 (mod {q})")
-    print()
-    
-    # Generate all inverse twiddle factors
-    inverse_twiddles = []
-    for k in range(N):
-        twiddle = mod_exp(psi_inv, k, q)
-        inverse_twiddles.append(twiddle)
-    
-    return inverse_twiddles
 
-def generate_verilog_rom(twiddles, filename="inverse_twiddle_rom.sv"):
-    """Generate SystemVerilog ROM module"""
-    
-    with open(filename, 'w') as f:
-        f.write("""`timescale 1ns / 1ps
+    Returns:
+        List of n inverse twiddle factors
+    """
+    psi_inv = mod_inv(psi, q)
+    return [pow(psi_inv, k, q) for k in range(n)]
+
+
+def verify_inverse_properties(psi, n, q):
+    """Verify inverse twiddle properties"""
+    psi_inv = mod_inv(psi, q)
+
+    print(f"Verifying inverse twiddle properties:")
+    print(f"  psi = {psi}")
+    print(f"  psi^(-1) = {psi_inv}")
+
+    # Verify psi * psi^(-1) = 1
+    product = (psi * psi_inv) % q
+    assert product == 1, f"  psi * psi^(-1) = {product} != 1"
+    print(f"  psi * psi^(-1) = 1 (mod {q})")
+
+    # Verify psi^(-n) = -1
+    psi_neg_n = pow(psi_inv, n, q)
+    assert psi_neg_n == q - 1, f"  psi^(-{n}) = {psi_neg_n} != -1"
+    print(f"  psi^(-{n}) = -1 (mod {q})")
+
+
+def generate_hex_file(twiddles, output_file, width=32):
+    """
+    Generate hex file for $readmemh initialization
+
+    Format: One hex value per line, no address, MSB first
+    """
+    hex_width = (width + 3) // 4  # Number of hex digits
+
+    with open(output_file, "w") as f:
+        for tw in twiddles:
+            f.write(f"{tw:0{hex_width}X}\n")
+
+    print(f"Generated hex file: {output_file}")
+    print(f"  Entries: {len(twiddles)}")
+    print(f"  Width: {width} bits ({hex_width} hex digits)")
+
+
+def generate_systemverilog_rom(twiddles, output_file, n, q, psi, width=32):
+    """Generate SystemVerilog ROM module with case statement (for reference)"""
+    psi_inv = mod_inv(psi, q)
+    addr_width = (len(twiddles) - 1).bit_length()
+    if addr_width == 0:
+        addr_width = 1
+
+    sv_code = f"""\
+`timescale 1ns / 1ps
 
 //==============================================================================
 // Inverse Twiddle Factor ROM for Inverse NTT
 //==============================================================================
-// Contains precomputed inverse twiddle factors: ψ^(-k) mod q
-// where ψ^(-1) is the inverse of ψ mod q
+// Contains precomputed inverse twiddle factors: psi^(-k) mod q
+// where psi^(-1) is the inverse of psi mod q
 //
-// Generated by: scripts/generate_inverse_twiddles.py
+// Parameters:
+//   - N = {n} (NTT size)
+//   - Q = {q} (modulus)
+//   - psi = {psi} (primitive {2 * n}-th root of unity)
+//   - psi^(-1) = {psi_inv}
+//
+// Stores psi^(-addr) for addr in [0, N-1]
+// Total entries: {len(twiddles)}
+//
+// Auto-generated by scripts/generate_inverse_twiddles.py
 //==============================================================================
 
 module inverse_twiddle_rom #(
-    parameter int WIDTH = 32,      // Bit width
-    parameter int ADDR_WIDTH = 8  // Address width
+    parameter int WIDTH = {width},
+    parameter int ADDR_WIDTH = {addr_width}
 ) (
-    input  logic [ADDR_WIDTH-1:0] addr,    // Read address
-    output logic [WIDTH-1:0]      twiddle  // Inverse twiddle factor output
+    input  logic [ADDR_WIDTH-1:0] addr,
+    output logic [WIDTH-1:0]      twiddle
 );
 
     // Inverse twiddle factor lookup table
     always_comb begin
         case (addr)
-""")
-        
-        # Write all twiddle factors
-        for i, twiddle in enumerate(twiddles):
-            f.write(f"            8'd{i}: twiddle = 32'd{twiddle};\n")
-        
-        f.write("""            default: twiddle = 32'd0;
+"""
+
+    for i, tw in enumerate(twiddles):
+        sv_code += f"            {addr_width}'d{i}: twiddle = {width}'d{tw};\n"
+
+    sv_code += f"""\
+            default: twiddle = {width}'d0;
         endcase
     end
 
 endmodule
-""")
-    
-    print(f"✓ Generated SystemVerilog ROM: {filename}")
+"""
+
+    with open(output_file, "w") as f:
+        f.write(sv_code)
+
+    print(f"Generated SystemVerilog ROM: {output_file}")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Generate inverse NTT twiddle factors for hardware implementation"
+    )
+    parser.add_argument(
+        "--n", type=int, default=DEFAULT_N, help=f"NTT size (default: {DEFAULT_N})"
+    )
+    parser.add_argument(
+        "--q", type=int, default=DEFAULT_Q, help=f"Modulus (default: {DEFAULT_Q})"
+    )
+    parser.add_argument(
+        "--psi",
+        type=int,
+        default=DEFAULT_PSI,
+        help=f"Primitive root (default: {DEFAULT_PSI})",
+    )
+    parser.add_argument("--width", type=int, default=32, help="Bit width (default: 32)")
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help="Output directory (default: ../rtl)",
+    )
+    parser.add_argument(
+        "--no-rom", action="store_true", help="Skip generating SystemVerilog ROM"
+    )
+    args = parser.parse_args()
+
+    # Determine output directory
+    script_dir = Path(__file__).parent
+    if args.output_dir:
+        output_dir = Path(args.output_dir)
+    else:
+        output_dir = script_dir.parent / "rtl"
+    output_dir.mkdir(exist_ok=True)
+
+    print("=" * 70)
+    print(" NTT Inverse Twiddle Factor Generator")
+    print("=" * 70)
+    print(f"Parameters: N={args.n}, Q={args.q}, psi={args.psi}")
+    print()
+
+    # Verify inverse properties
+    verify_inverse_properties(args.psi, args.n, args.q)
+    print()
+
+    # Compute inverse twiddles
+    print(f"Computing {args.n} inverse twiddle factors...")
+    twiddles = compute_inverse_twiddles(args.n, args.q, args.psi)
+    print(f"  First 5: {twiddles[:5]}")
+    print(f"  Last 5:  {twiddles[-5:]}")
+    print()
+
+    # Generate hex file for BRAM
+    hex_file = output_dir / "twiddle_inverse.hex"
+    generate_hex_file(twiddles, hex_file, args.width)
+
+    # Generate SystemVerilog ROM (optional)
+    if not args.no_rom:
+        rom_file = output_dir / "inverse_twiddle_rom.sv"
+        generate_systemverilog_rom(
+            twiddles, rom_file, args.n, args.q, args.psi, args.width
+        )
+
+    print()
+    print("=" * 70)
+    print(" Generation Complete!")
+    print("=" * 70)
+
 
 if __name__ == "__main__":
-    # Parameters
-    N = 256
-    q = 8380417
-    psi = 1239911
-    
-    # Generate inverse twiddles
-    inverse_twiddles = generate_inverse_twiddles(N, q, psi)
-    
-    # Print first few for verification
-    print("First 10 inverse twiddle factors:")
-    for i in range(10):
-        print(f"  ψ^(-{i}) = {inverse_twiddles[i]}")
-    print()
-    
-    # Verify some properties
-    print("Verification:")
-    # ψ^0 = 1
-    assert inverse_twiddles[0] == 1, "ψ^(-0) should be 1"
-    print(f"  ψ^(-0) = {inverse_twiddles[0]} ✓")
-    
-    # ψ^(-1)
-    psi_inv = mod_inv(psi, q)
-    assert inverse_twiddles[1] == psi_inv, "ψ^(-1) should match inverse"
-    print(f"  ψ^(-1) = {inverse_twiddles[1]} ✓")
-    
-    # ψ^(-N) should be -1 (negacyclic property)
-    psi_neg_n = mod_exp(psi_inv, N, q)
-    assert psi_neg_n == q - 1, "ψ^(-N) should be -1"
-    print(f"  ψ^(-{N}) = {psi_neg_n} ✓")
-    print()
-    
-    # Generate Verilog ROM
-    output_file = "../rtl/inverse_twiddle_rom.sv"
-    generate_verilog_rom(inverse_twiddles, output_file)
-    print()
-    print("=" * 60)
-    print("Inverse twiddle generation complete!")
-    print("=" * 60)
+    main()

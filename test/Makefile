@@ -37,6 +37,12 @@ include $(shell cocotb-config --makefiles)/Makefile.sim
 # Default target - show help
 .DEFAULT_GOAL := help
 
+# Copy twiddle hex files from rtl directory (needed for BRAM simulation)
+.PHONY: copy-hex-files
+copy-hex-files:
+	@cp -f $(PWD)/../rtl/twiddle_forward.hex $(PWD)/ 2>/dev/null || true
+	@cp -f $(PWD)/../rtl/twiddle_inverse.hex $(PWD)/ 2>/dev/null || true
+
 # Test targets
 .PHONY: help test-mod-add test-mod-sub test-ntt-mult test-all clean
 
@@ -152,7 +158,7 @@ test-ntt-control: clean
 		sim
 
 # Test NTT polynomial multiply
-test-ntt-poly: clean
+test-ntt-poly: clean copy-hex-files
 	@echo ""
 	@echo "======================================================================"
 	@echo " Testing NTT Polynomial Multiply (Top Level)"
@@ -160,12 +166,11 @@ test-ntt-poly: clean
 	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
 		MODULE=cocotb_tests.test_ntt_poly_mult \
 		TOPLEVEL=ntt_poly_mult \
-		VERILOG_SOURCES="$(PWD)/../rtl/ntt_poly_mult.sv $(PWD)/../rtl/ntt_forward.sv $(PWD)/../rtl/ntt_cg_address_gen.sv $(PWD)/../rtl/ntt_twiddle_table.sv $(PWD)/../rtl/ntt_bank_io.sv $(PWD)/../rtl/ntt_bank_switch.sv $(PWD)/../rtl/ntt_control_parallel.sv $(PWD)/../rtl/ntt_inverse.sv $(PWD)/../rtl/ntt_pointwise_mult.sv $(PWD)/../rtl/twiddle_rom.sv $(PWD)/../rtl/inverse_twiddle_rom.sv $(PWD)/../rtl/coeff_ram.sv $(PWD)/../rtl/ntt_butterfly.sv $(PWD)/../rtl/ntt_butterfly_inverse.sv $(PWD)/../rtl/mod_mult.sv $(PWD)/../rtl/mod_add.sv $(PWD)/../rtl/mod_sub.sv $(PWD)/../rtl/barrett_reduction.sv $(PWD)/../rtl/montgomery_reduction.sv" \
+		VERILOG_SOURCES="$(PWD)/../rtl/ntt_poly_mult.sv $(PWD)/../rtl/ntt_forward.sv $(PWD)/../rtl/ntt_coeff_banks.sv $(PWD)/../rtl/ntt_cg_address_gen.sv $(PWD)/../rtl/twiddle_bram.sv $(PWD)/../rtl/twiddle_bram_multiport.sv $(PWD)/../rtl/ntt_bank_io.sv $(PWD)/../rtl/ntt_bank_switch.sv $(PWD)/../rtl/ntt_control_parallel.sv $(PWD)/../rtl/ntt_inverse.sv $(PWD)/../rtl/ntt_pointwise_mult.sv $(PWD)/../rtl/twiddle_rom.sv $(PWD)/../rtl/ntt_butterfly.sv $(PWD)/../rtl/mod_mult.sv $(PWD)/../rtl/mod_add.sv $(PWD)/../rtl/mod_sub.sv $(PWD)/../rtl/barrett_reduction.sv $(PWD)/../rtl/montgomery_reduction.sv" \
 		sim
 
 # Test NTT forward (full integration)
-test-ntt-forward: clean
-
+test-ntt-forward: clean copy-hex-files
 	@echo ""
 	@echo "======================================================================"
 	@echo " Testing NTT Forward Transform (Full Integration)"
@@ -173,7 +178,7 @@ test-ntt-forward: clean
 	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
 		MODULE=cocotb_tests.test_ntt_forward \
 		TOPLEVEL=ntt_forward \
-		VERILOG_SOURCES="$(PWD)/../rtl/ntt_forward.sv $(PWD)/../rtl/ntt_cg_address_gen.sv $(PWD)/../rtl/ntt_twiddle_table.sv $(PWD)/../rtl/ntt_bank_io.sv $(PWD)/../rtl/ntt_bank_switch.sv $(PWD)/../rtl/ntt_control_parallel.sv $(PWD)/../rtl/twiddle_rom.sv $(PWD)/../rtl/ntt_butterfly.sv $(PWD)/../rtl/mod_mult.sv $(PWD)/../rtl/mod_add.sv $(PWD)/../rtl/mod_sub.sv $(PWD)/../rtl/barrett_reduction.sv $(PWD)/../rtl/montgomery_reduction.sv" \
+		VERILOG_SOURCES="$(PWD)/../rtl/ntt_forward.sv $(PWD)/../rtl/ntt_coeff_banks.sv $(PWD)/../rtl/ntt_cg_address_gen.sv $(PWD)/../rtl/twiddle_bram.sv $(PWD)/../rtl/twiddle_bram_multiport.sv $(PWD)/../rtl/ntt_bank_io.sv $(PWD)/../rtl/ntt_bank_switch.sv $(PWD)/../rtl/ntt_control_parallel.sv $(PWD)/../rtl/twiddle_rom.sv $(PWD)/../rtl/ntt_butterfly.sv $(PWD)/../rtl/mod_mult.sv $(PWD)/../rtl/mod_add.sv $(PWD)/../rtl/mod_sub.sv $(PWD)/../rtl/barrett_reduction.sv $(PWD)/../rtl/montgomery_reduction.sv" \
 		sim
 
 # Run all tests
@@ -209,7 +214,7 @@ test-all: clean
 	@echo "======================================================================"
 
 # Testing NTT Inverse Transform
-test-ntt-inverse: clean
+test-ntt-inverse: clean copy-hex-files
 	@echo ""
 	@echo "======================================================================"
 	@echo " Testing NTT Inverse Transform (INTT)"
@@ -217,7 +222,7 @@ test-ntt-inverse: clean
 	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
 		MODULE=cocotb_tests.test_ntt_inverse \
 		TOPLEVEL=ntt_inverse \
-		VERILOG_SOURCES="$(PWD)/../rtl/ntt_inverse.sv $(PWD)/../rtl/ntt_control_parallel.sv $(PWD)/../rtl/coeff_ram.sv $(PWD)/../rtl/inverse_twiddle_rom.sv $(PWD)/../rtl/ntt_butterfly.sv $(PWD)/../rtl/mod_mult.sv $(PWD)/../rtl/mod_add.sv $(PWD)/../rtl/mod_sub.sv $(PWD)/../rtl/barrett_reduction.sv $(PWD)/../rtl/montgomery_reduction.sv" \
+		VERILOG_SOURCES="$(PWD)/../rtl/ntt_inverse.sv $(PWD)/../rtl/ntt_control_parallel.sv $(PWD)/../rtl/twiddle_bram.sv $(PWD)/../rtl/twiddle_bram_multiport.sv $(PWD)/../rtl/ntt_butterfly.sv $(PWD)/../rtl/mod_mult.sv $(PWD)/../rtl/mod_add.sv $(PWD)/../rtl/mod_sub.sv $(PWD)/../rtl/barrett_reduction.sv $(PWD)/../rtl/montgomery_reduction.sv" \
 		sim
 
 # Clean target

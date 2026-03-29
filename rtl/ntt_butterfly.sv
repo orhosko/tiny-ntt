@@ -35,14 +35,14 @@ module ntt_butterfly #(
 
   localparam int MOD_WIDTH = (Q > 0) ? $clog2(Q) : WIDTH;
 
-  generate
-    if (WIDTH > MOD_WIDTH) begin : gen_unused_inputs
-      (* keep *) logic unused_b;
-      (* keep *) logic unused_twiddle;
-      assign unused_b = ^b[WIDTH-1:MOD_WIDTH];
-      assign unused_twiddle = ^twiddle[WIDTH-1:MOD_WIDTH];
-    end
-  endgenerate
+  // generate
+  //   if (WIDTH > MOD_WIDTH) begin : gen_unused_inputs
+  //     (* keep *) logic unused_b;
+  //     (* keep *) logic unused_twiddle;
+  //     assign unused_b = ^b[WIDTH-1:MOD_WIDTH];
+  //     assign unused_twiddle = ^twiddle[WIDTH-1:MOD_WIDTH];
+  //   end
+  // endgenerate
 
   // Intermediate result: ω·b
   logic [WIDTH-1:0] twiddle_mult_b;

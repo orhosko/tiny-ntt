@@ -105,7 +105,7 @@ module ntt_inverse #(
   logic [PARALLEL-1:0] lane_valid_pipe[0:MULT_PIPELINE];
   logic read_bank_sel;
   logic write_bank_sel;
-  logic write_bank_sel_pipe[0:MULT_PIPELINE];
+  logic [MULT_PIPELINE:0] write_bank_sel_pipe;  // Packed array for Icarus Verilog compatibility
   localparam int OUTPUT_BANK = (LOGN % 2 == 0) ? 0 : 1;
 
   // Twiddle and butterfly signals
@@ -343,6 +343,7 @@ module ntt_inverse #(
   // Pipeline address/valid alignment for mult latency
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
+      write_bank_sel_pipe <= '0;  // Packed array reset
       for (int stage_idx = 0; stage_idx <= MULT_PIPELINE; stage_idx++) begin
         for (int lane_idx = 0; lane_idx < PARALLEL; lane_idx++) begin
           addr0_bank_pipe[stage_idx][lane_idx] <= '0;
@@ -354,7 +355,6 @@ module ntt_inverse #(
           addr0_out_index_pipe[stage_idx][lane_idx] <= '0;
           addr1_out_index_pipe[stage_idx][lane_idx] <= '0;
           lane_valid_pipe[stage_idx][lane_idx] <= 1'b0;
-          write_bank_sel_pipe[stage_idx] <= 1'b0;
         end
       end
     end else begin
@@ -378,8 +378,9 @@ module ntt_inverse #(
         addr0_out_index_pipe[stage_idx] <= addr0_out_index_pipe[stage_idx - 1];
         addr1_out_index_pipe[stage_idx] <= addr1_out_index_pipe[stage_idx - 1];
         lane_valid_pipe[stage_idx] <= lane_valid_pipe[stage_idx - 1];
-        write_bank_sel_pipe[stage_idx] <= write_bank_sel_pipe[stage_idx - 1];
       end
+      // Shift packed write_bank_sel_pipe
+      write_bank_sel_pipe[MULT_PIPELINE:1] <= write_bank_sel_pipe[MULT_PIPELINE-1:0];
     end
   end
 

@@ -18,7 +18,7 @@ module ntt_poly_mult #(
     parameter int Q              = 8380417,
     parameter int ADDR_WIDTH     = $clog2(N),
     parameter int REDUCTION_TYPE = 1,
-    parameter int PARALLEL       = 8,
+    parameter int PARALLEL       = 1,
     parameter bit POINTWISE_PARALLEL = 1'b0,
     parameter int MULT_PIPELINE  = 3
 ) (

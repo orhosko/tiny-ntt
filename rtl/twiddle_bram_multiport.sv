@@ -44,14 +44,39 @@ module twiddle_bram_multiport #(
     // Number of dual-port BRAMs needed (each provides 2 read ports)
     localparam int NUM_BRAMS = (PARALLEL + 1) / 2;
 
+    // Intermediary signals for addresses and data (workaround for iverilog bug
+    // with packed array indexing in generate blocks)
+    logic [ADDR_WIDTH-1:0] addr_a_arr [0:NUM_BRAMS-1];
+    logic [ADDR_WIDTH-1:0] addr_b_arr [0:NUM_BRAMS-1];
+    logic [WIDTH-1:0] data_a_arr [0:NUM_BRAMS-1];
+    logic [WIDTH-1:0] data_b_arr [0:NUM_BRAMS-1];
+    
+    // Map packed array elements to unpacked for iverilog compatibility
+    generate
+        for (genvar i = 0; i < NUM_BRAMS; i++) begin : gen_arr_map
+            localparam int LANE_A = i * 2;
+            localparam int LANE_B = i * 2 + 1;
+            
+            // Input address mapping
+            assign addr_a_arr[i] = addr[LANE_A];
+            if (LANE_B < PARALLEL) begin : gen_lane_b_valid
+                assign addr_b_arr[i] = addr[LANE_B];
+            end else begin : gen_lane_b_zero
+                assign addr_b_arr[i] = {ADDR_WIDTH{1'b0}};
+            end
+            
+            // Output data mapping
+            assign data[LANE_A] = data_a_arr[i];
+            if (LANE_B < PARALLEL) begin : gen_data_b_valid
+                assign data[LANE_B] = data_b_arr[i];
+            end
+        end
+    endgenerate
+    
     // Generate dual-port BRAMs
     generate
         for (genvar i = 0; i < NUM_BRAMS; i++) begin : gen_brams
-            // Calculate which lanes this BRAM serves
-            localparam int LANE_A = i * 2;
-            localparam int LANE_B = i * 2 + 1;
-
-            // Instantiate dual-port BRAM
+            // Instantiate dual-port BRAM using unpacked intermediaries
             twiddle_bram #(
                 .WIDTH     (WIDTH),
                 .DEPTH     (DEPTH),
@@ -59,10 +84,10 @@ module twiddle_bram_multiport #(
                 .HEX_FILE  (HEX_FILE)
             ) u_bram (
                 .clk   (clk),
-                .addr_a(addr[LANE_A]),
-                .data_a(data[LANE_A]),
-                .addr_b((LANE_B < PARALLEL) ? addr[LANE_B] : '0),
-                .data_b(data[LANE_B])
+                .addr_a(addr_a_arr[i]),
+                .data_a(data_a_arr[i]),
+                .addr_b(addr_b_arr[i]),
+                .data_b(data_b_arr[i])
             );
         end
     endgenerate

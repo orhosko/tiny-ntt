@@ -7,7 +7,13 @@
 // Constant-Geometry (bit-reversed input, CT butterflies).
 //
 // Twiddle factors are stored in BRAM for efficient resource usage.
-// Coefficient storage is in a separate ntt_coeff_banks module.
+// Coefficient storage uses BRAM-based banks with hardwired read connections.
+//
+// Timing:
+//   - Twiddle BRAM: 1-cycle read latency
+//   - Coefficient BRAM: 1-cycle read latency (matched, no extra register needed)
+//   - Butterfly pipeline: MULT_PIPELINE cycles
+//   - Total pipeline: MULT_PIPELINE + 1 cycles
 //==============================================================================
 
 module ntt_forward #(
@@ -50,6 +56,7 @@ module ntt_forward #(
   localparam int OUTPUT_BANK = (LOGN % 2 == 0) ? 0 : 1;
 
   // Pipeline depth: MULT_PIPELINE (butterfly) + 1 (BRAM read latency)
+  // Both twiddle and coefficient BRAMs have 1-cycle latency, so they're aligned
   localparam int BRAM_LATENCY = 1;
   localparam int TOTAL_PIPE_DEPTH = MULT_PIPELINE + BRAM_LATENCY;
 
@@ -94,13 +101,12 @@ module ntt_forward #(
   //============================================================================
   // Butterfly Signals
   //============================================================================
-  logic [PARALLEL-1:0][WIDTH-1:0] coeff_a_comb;  // From coefficient banks (combinational)
-  logic [PARALLEL-1:0][WIDTH-1:0] coeff_b_comb;  // From coefficient banks (combinational)
-  logic [PARALLEL-1:0][WIDTH-1:0] a_in;          // Registered to match BRAM twiddle latency
-  logic [PARALLEL-1:0][WIDTH-1:0] b_in;          // Registered to match BRAM twiddle latency
-  logic [PARALLEL-1:0][WIDTH-1:0] a_out;         // Butterfly outputs
-  logic [PARALLEL-1:0][WIDTH-1:0] b_out;         // Butterfly outputs
-  logic [PARALLEL-1:0][WIDTH-1:0] twiddle;       // From BRAM (1-cycle latency)
+  // Coefficient inputs come directly from BRAM (1-cycle latency, aligned with twiddle)
+  logic [PARALLEL-1:0][WIDTH-1:0] coeff_a;     // From coefficient BRAM (registered output)
+  logic [PARALLEL-1:0][WIDTH-1:0] coeff_b;     // From coefficient BRAM (registered output)
+  logic [PARALLEL-1:0][WIDTH-1:0] a_out;       // Butterfly outputs
+  logic [PARALLEL-1:0][WIDTH-1:0] b_out;       // Butterfly outputs
+  logic [PARALLEL-1:0][WIDTH-1:0] twiddle;     // From twiddle BRAM (1-cycle latency)
 
   //============================================================================
   // Bank Selection Signals
@@ -199,8 +205,10 @@ module ntt_forward #(
   );
 
   //============================================================================
-  // Coefficient Banks (Separate Module for LUT Analysis)
+  // Coefficient Banks (BRAM-based with Hardwired Reads)
   //============================================================================
+  // Outputs coeff_a and coeff_b have 1-cycle latency (BRAM read).
+  // This matches the twiddle BRAM latency, so no extra register stage needed.
   ntt_coeff_banks #(
       .N               (N),
       .WIDTH           (WIDTH),
@@ -219,17 +227,17 @@ module ntt_forward #(
       .load_enable    (load_coeff && !busy),
       .load_addr      (load_addr),
       .load_data      (load_data),
-      // Read interface
+      // Read interface (2-cycle latency for external reads)
       .read_addr      (read_addr),
       .read_data      (read_data),
-      // Butterfly read interface
+      // Butterfly read interface (1-cycle latency, hardwired connections)
       .read_bank_sel  (read_bank_sel),
       .rd_bank_a      (addr0_bank),
       .rd_index_a     (addr0_index),
       .rd_bank_b      (addr1_bank),
       .rd_index_b     (addr1_index),
-      .coeff_a        (coeff_a_comb),
-      .coeff_b        (coeff_b_comb),
+      .coeff_a        (coeff_a),      // Direct to butterflies (BRAM output)
+      .coeff_b        (coeff_b),      // Direct to butterflies (BRAM output)
       // Butterfly write interface
       .write_enable   (busy),
       .write_bank_sel (write_bank_sel_pipe[TOTAL_PIPE_DEPTH]),
@@ -241,21 +249,6 @@ module ntt_forward #(
       .result_a       (a_out),
       .result_b       (b_out)
   );
-
-  //============================================================================
-  // Pipeline: Register Coefficient Reads to Match BRAM Twiddle Latency
-  //============================================================================
-  always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-      for (int lane = 0; lane < PARALLEL; lane++) begin
-        a_in[lane] <= '0;
-        b_in[lane] <= '0;
-      end
-    end else begin
-      a_in <= coeff_a_comb;
-      b_in <= coeff_b_comb;
-    end
-  end
 
   //============================================================================
   // Pipeline: Address/Valid Alignment for Write-back
@@ -294,6 +287,8 @@ module ntt_forward #(
   //============================================================================
   // Butterflies
   //============================================================================
+  // Inputs come directly from BRAM outputs (coeff_a, coeff_b, twiddle)
+  // All have 1-cycle latency and are aligned.
   genvar lane;
   generate
     for (lane = 0; lane < PARALLEL; lane++) begin : gen_butterflies
@@ -305,9 +300,9 @@ module ntt_forward #(
       ) u_butterfly (
           .clk    (clk),
           .rst_n  (rst_n),
-          .a      (a_in[lane]),
-          .b      (b_in[lane]),
-          .twiddle(twiddle[lane]),
+          .a      (coeff_a[lane]),   // Direct from coefficient BRAM
+          .b      (coeff_b[lane]),   // Direct from coefficient BRAM
+          .twiddle(twiddle[lane]),   // Direct from twiddle BRAM
           .a_out  (a_out[lane]),
           .b_out  (b_out[lane])
       );

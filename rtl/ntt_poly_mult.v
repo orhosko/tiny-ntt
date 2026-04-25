@@ -13,12 +13,17 @@
 //==============================================================================
 
 module ntt_poly_mult #(
-    parameter int N              = 256,
+    parameter int N              = 1024,
     parameter int WIDTH          = 32,
     parameter int Q              = 8380417,
     parameter int ADDR_WIDTH     = $clog2(N),
     parameter int REDUCTION_TYPE = 1,
     parameter int PARALLEL       = 1,
+    parameter int PSI            = 5548360,
+    parameter int PSI_INV        = 2320879,
+    parameter int N_INV          = 8372233,
+    parameter     FWD_TWIDDLE_FILE = "twiddle_forward_1024.hex",
+    parameter     INV_TWIDDLE_FILE = "twiddle_inverse_1024.hex",
     parameter bit POINTWISE_PARALLEL = 1'b0,
     parameter int MULT_PIPELINE  = 3
 ) (
@@ -37,18 +42,18 @@ module ntt_poly_mult #(
 
     // Load interface
     input  logic                  load_coeff,
-    input  logic                  load_sel,   // 0 = A, 1 = B
+    input  logic                  load_sel,
     input  logic [ADDR_WIDTH-1:0] load_addr,
-    input  logic [     WIDTH-1:0] load_data,
+    input  logic [WIDTH-1:0]      load_data,
 
     // Debug read interface (A/B memory)
     input  logic                  debug_read_sel,
     input  logic [ADDR_WIDTH-1:0] debug_read_addr,
-    output logic [     WIDTH-1:0] debug_read_data,
+    output logic [WIDTH-1:0]      debug_read_data,
 
     // Read interface (result)
     input  logic [ADDR_WIDTH-1:0] read_addr,
-    output logic [     WIDTH-1:0] read_data
+    output logic [WIDTH-1:0]      read_data
 );
 
   localparam int TOTAL_BUTTERFLIES = N / 2;
@@ -72,14 +77,12 @@ module ntt_poly_mult #(
 
   assign debug_state = state;
 
-  // Local coefficient storage
   logic [WIDTH-1:0] a_mem[0:N-1];
   logic [WIDTH-1:0] b_mem[0:N-1];
   logic [WIDTH-1:0] a_ntt[0:N-1];
   logic [WIDTH-1:0] b_ntt[0:N-1];
   logic [WIDTH-1:0] c_ntt[0:N-1];
 
-  // Initialize coefficient storage for simulation
   initial begin
     for (int i = 0; i < N; i++) begin
       a_mem[i] = '0;
@@ -87,7 +90,6 @@ module ntt_poly_mult #(
     end
   end
 
-  // Forward NTT interface
   logic fwd_start;
   logic fwd_busy;
   logic fwd_load;
@@ -96,7 +98,6 @@ module ntt_poly_mult #(
   logic [ADDR_WIDTH-1:0] fwd_read_addr;
   logic [WIDTH-1:0] fwd_read_data;
 
-  // Inverse NTT interface
   logic inv_start;
   logic inv_busy;
   logic inv_load;
@@ -105,7 +106,6 @@ module ntt_poly_mult #(
   logic [ADDR_WIDTH-1:0] inv_read_addr;
   logic [WIDTH-1:0] inv_read_data;
 
-  // Counters
   logic [READ_COUNT_WIDTH-1:0] load_index;
   logic [READ_COUNT_WIDTH-1:0] read_index;
   logic read_pending;
@@ -115,7 +115,6 @@ module ntt_poly_mult #(
 
   logic clear_ntt;
 
-  // Pointwise multiplier
   logic [WIDTH-1:0] mul_a;
   logic [WIDTH-1:0] mul_b;
   logic [WIDTH-1:0] mul_result;
@@ -124,9 +123,6 @@ module ntt_poly_mult #(
   logic [N*WIDTH-1:0] c_ntt_flat;
   logic [WIDTH-1:0] c_ntt_parallel[0:N-1];
 
-  //==============================================================================
-  // Coefficient load storage
-  //==============================================================================
   always_ff @(posedge clk) begin
     if (load_coeff && state == IDLE) begin
       if (load_sel) begin
@@ -137,57 +133,53 @@ module ntt_poly_mult #(
     end
   end
 
-  //==============================================================================
-  // Forward NTT instance
-  //==============================================================================
   ntt_forward #(
       .N(N),
       .WIDTH(WIDTH),
       .Q(Q),
+      .PSI(PSI),
       .ADDR_WIDTH(ADDR_WIDTH),
       .REDUCTION_TYPE(REDUCTION_TYPE),
       .PARALLEL(PARALLEL),
-      .MULT_PIPELINE(MULT_PIPELINE)
+      .MULT_PIPELINE(MULT_PIPELINE),
+      .TWIDDLE_FILE(FWD_TWIDDLE_FILE)
   ) u_forward (
-      .clk       (clk),
-      .rst_n     (rst_n),
-      .start     (fwd_start),
-      .done      (fwd_done),
-      .busy      (fwd_busy),
+      .clk(clk),
+      .rst_n(rst_n),
+      .start(fwd_start),
+      .done(fwd_done),
+      .busy(fwd_busy),
       .load_coeff(fwd_load),
-      .load_addr (fwd_load_addr),
-      .load_data (fwd_load_data),
-      .read_addr (fwd_read_addr),
-      .read_data (fwd_read_data)
+      .load_addr(fwd_load_addr),
+      .load_data(fwd_load_data),
+      .read_addr(fwd_read_addr),
+      .read_data(fwd_read_data)
   );
 
-  //==============================================================================
-  // Inverse NTT instance
-  //==============================================================================
   ntt_inverse #(
       .N(N),
       .WIDTH(WIDTH),
       .Q(Q),
+      .PSI_INV(PSI_INV),
       .ADDR_WIDTH(ADDR_WIDTH),
       .REDUCTION_TYPE(REDUCTION_TYPE),
+      .N_INV(N_INV),
       .PARALLEL(PARALLEL),
-      .MULT_PIPELINE(MULT_PIPELINE)
+      .MULT_PIPELINE(MULT_PIPELINE),
+      .TWIDDLE_FILE(INV_TWIDDLE_FILE)
   ) u_inverse (
-      .clk       (clk),
-      .rst_n     (rst_n),
-      .start     (inv_start),
-      .done      (inv_done),
-      .busy      (inv_busy),
+      .clk(clk),
+      .rst_n(rst_n),
+      .start(inv_start),
+      .done(inv_done),
+      .busy(inv_busy),
       .load_coeff(inv_load),
-      .load_addr (inv_load_addr),
-      .load_data (inv_load_data),
-      .read_addr (inv_read_addr),
-      .read_data (inv_read_data)
+      .load_addr(inv_load_addr),
+      .load_data(inv_load_data),
+      .read_addr(inv_read_addr),
+      .read_data(inv_read_data)
   );
 
-  //==============================================================================
-  // Pointwise multiplier
-  //==============================================================================
   always_comb begin
     for (int i = 0; i < N; i++) begin
       a_ntt_flat[i * WIDTH +: WIDTH] = a_ntt[i];
@@ -208,8 +200,8 @@ module ntt_poly_mult #(
           .REDUCTION_TYPE(REDUCTION_TYPE),
           .MULT_PIPELINE(MULT_PIPELINE)
       ) u_pointwise_mult_parallel (
-          .clk        (clk),
-          .rst_n      (rst_n),
+          .clk(clk),
+          .rst_n(rst_n),
           .poly_a_flat(a_ntt_flat),
           .poly_b_flat(b_ntt_flat),
           .poly_c_flat(c_ntt_flat)
@@ -221,8 +213,8 @@ module ntt_poly_mult #(
           .REDUCTION_TYPE(REDUCTION_TYPE),
           .PIPELINE_STAGES(MULT_PIPELINE)
       ) u_pointwise_mult (
-          .clk   (clk),
-          .rst_n (rst_n),
+          .clk(clk),
+          .rst_n(rst_n),
           .a(mul_a),
           .b(mul_b),
           .result(mul_result)
@@ -230,9 +222,6 @@ module ntt_poly_mult #(
     end
   endgenerate
 
-  //==============================================================================
-  // FSM
-  //==============================================================================
   assign clear_ntt = (state == IDLE && next_state == LOAD_A);
 
   always_ff @(posedge clk or negedge rst_n) begin
@@ -317,9 +306,6 @@ module ntt_poly_mult #(
     end
   end
 
-  //==============================================================================
-  // Pointwise multiply pipeline tracking (serial)
-  //==============================================================================
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       for (int stage_idx = 0; stage_idx <= MULT_PIPELINE; stage_idx++) begin
@@ -341,9 +327,6 @@ module ntt_poly_mult #(
     end
   end
 
-  //==============================================================================
-  // NTT coefficient storage
-  //==============================================================================
   generate
     for (genvar i = 0; i < N; i++) begin : gen_ntt_storage
       always_ff @(posedge clk or negedge rst_n) begin
@@ -443,9 +426,6 @@ module ntt_poly_mult #(
   assign busy = (state != IDLE) && (state != DONE_STATE);
   assign done = (state == DONE_STATE);
 
-  //==============================================================================
-  // Forward NTT drive
-  //==============================================================================
   assign fwd_start = (state == RUN_A || state == RUN_B) && !fwd_started;
 
   assign fwd_load = (state == LOAD_A || state == LOAD_B) && (load_index < N);
@@ -458,15 +438,9 @@ module ntt_poly_mult #(
                          (read_index < N ? read_index[ADDR_WIDTH-1:0] : ADDR_WIDTH'(N - 1)) :
                          '0;
 
-  //==============================================================================
-  // Pointwise multiply drive
-  //==============================================================================
   assign mul_a = (point_index < N) ? a_ntt[point_index] : '0;
   assign mul_b = (point_index < N) ? b_ntt[point_index] : '0;
 
-  //==============================================================================
-  // Inverse NTT drive
-  //==============================================================================
   assign inv_start = (state == RUN_INV) && !inv_started;
   assign inv_load = (state == LOAD_INV) && (load_index < N);
   assign inv_load_addr = load_index[ADDR_WIDTH-1:0];

@@ -14,9 +14,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from refs.ntt_forward_reference import ntt_forward_reference
 
 # NTT parameters
-N = 256
-Q = 8380417
-PSI = 1239911
+N = int(os.getenv("NTT_N", "1024"))
+Q = int(os.getenv("NTT_Q", "8380417"))
+PSI = int(os.getenv("NTT_PSI", "5548360"))
 LOGN = N.bit_length() - 1
 
 

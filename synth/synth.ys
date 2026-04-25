@@ -1,14 +1,12 @@
 # Yosys synthesis script for NTT Pointwise Multiplication Unit
-# Edit rtl/ntt_pointwise_mult_synth.sv to change REDUCTION_TYPE parameter
+# Edit rtl/ntt_pointwise_mult.v to change REDUCTION_TYPE parameter
 
-# Read SystemVerilog source files
-read_verilog -sv ../rtl/barrett_reduction.sv
-read_verilog -sv ../rtl/montgomery_reduction.sv
-read_verilog -sv ../rtl/mod_mult.sv
-read_verilog -sv ../rtl/ntt_pointwise_mult_synth.sv
+read_verilog ../rtl/barrett_reduction.v
+read_verilog ../rtl/montgomery_reduction.v
+read_verilog ../rtl/mod_mult.v
+read_verilog ../rtl/ntt_pointwise_mult.v
 
-# Set top module and check hierarchy
-hierarchy -top ntt_pointwise_mult_synth -check
+hierarchy -top ntt_pointwise_mult -check
 
 # Translate processes (converts 'always' blocks to logic)
 proc

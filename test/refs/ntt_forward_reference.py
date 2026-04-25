@@ -1,13 +1,14 @@
 """
 Python reference implementation of Constant-Geometry NTT for testing.
-N=256, q=8380417, psi=1239911 (primitive 512-th root of unity)
 """
 
+import os
+
 # NTT Parameters
-N = 256
-Q = 8380417
-PSI = 1239911  # Primitive 2N-th root (ψ^512 ≡ 1, ψ^256 ≡ -1)
-OMEGA = 169688  # ω = ψ² (primitive N-th root)
+N = int(os.getenv("NTT_N", "1024"))
+Q = int(os.getenv("NTT_Q", "8380417"))
+PSI = int(os.getenv("NTT_PSI", "5548360"))
+OMEGA = pow(PSI, 2, Q)
 
 
 def bit_reverse(value, bits):

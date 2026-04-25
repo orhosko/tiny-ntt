@@ -3,7 +3,7 @@
 //==============================================================================
 // Inverse NTT Module
 //==============================================================================
-// Complete N=256 inverse radix-2 Cooley-Tukey NTT pipeline
+// Complete N=1024 inverse radix-2 Cooley-Tukey NTT pipeline
 //
 // Performs INTT with final scaling by N^(-1) = 8347681
 //
@@ -17,40 +17,35 @@
 //==============================================================================
 
 module ntt_inverse #(
-    parameter int N              = 256,   // NTT size
-    parameter int WIDTH          = 32,    // Data width
-    parameter int Q              = 8380417,  // Modulus
-    parameter int PSI_INV        = 4231948,  // Inverse primitive 2N-th root (unused, twiddles precomputed)
-    parameter int ADDR_WIDTH     = $clog2(N),        // log2(N)
-    parameter int REDUCTION_TYPE = 0,        // 0=Simple, 1=Barrett, 2=Montgomery
-    parameter int N_INV          = 8347681,  // N^(-1) mod Q = 256^(-1) mod 8380417
-    parameter int PARALLEL       = 8,        // Butterflies per cycle
+    parameter int N              = 1024,
+    parameter int WIDTH          = 32,
+    parameter int Q              = 8380417,
+    parameter int PSI_INV        = 2320879,
+    parameter int ADDR_WIDTH     = $clog2(N),
+    parameter int REDUCTION_TYPE = 0,
+    parameter int N_INV          = 8372233,
+    parameter int PARALLEL       = 8,
     parameter int MULT_PIPELINE  = 3,
-    parameter     TWIDDLE_FILE   = "twiddle_inverse.hex"  // Hex file for twiddle BRAM
+    parameter     TWIDDLE_FILE   = "twiddle_inverse_1024.hex"
 ) (
     input logic clk,
     input logic rst_n,
 
     // Control interface
-    input  logic start,  // Start INTT computation
-    output logic done,   // Computation complete
-    output logic busy,   // Currently computing
+    input  logic start,
+    output logic done,
+    output logic busy,
 
-    // Load interface (write NTT coefficients before computation)
-    input logic                  load_coeff,  // Load coefficient enable
-    input logic [ADDR_WIDTH-1:0] load_addr,   // Load address
-    input logic [     WIDTH-1:0] load_data,   // Load data
+    // Load interface
+    input logic                  load_coeff,
+    input logic [ADDR_WIDTH-1:0] load_addr,
+    input logic [WIDTH-1:0]      load_data,
 
-    // Read interface (read results after computation)
-    input  logic [ADDR_WIDTH-1:0] read_addr,  // Read address
-    output logic [     WIDTH-1:0] read_data   // Read data
+    // Read interface
+    input  logic [ADDR_WIDTH-1:0] read_addr,
+    output logic [WIDTH-1:0]      read_data
 );
 
-  //============================================================================
-  // Internal Signals
-  //============================================================================
-
-  // INTT computation state
   typedef enum logic [1:0] {
     IDLE = 2'b00,
     INTT_COMPUTE = 2'b01,
@@ -63,7 +58,6 @@ module ntt_inverse #(
   localparam int LOGN = $clog2(N);
   localparam int TOTAL_BUTTERFLIES = N / 2;
 
-  // Control FSM signals (for INTT)
   logic intt_start, intt_done, intt_busy;
   logic intt_done_latched;
   logic [LOGN-1:0] stage;
@@ -72,7 +66,6 @@ module ntt_inverse #(
   logic [PARALLEL-1:0] lane_valid;
   logic ctrl_draining;
 
-  // Banked coefficient storage
   localparam int BANKS = (N < (PARALLEL * 2)) ? N : (PARALLEL * 2);
   localparam int BANK_DEPTH = (N + BANKS - 1) / BANKS;
   localparam int BANK_ADDR_WIDTH = $clog2(BANKS);
@@ -81,7 +74,6 @@ module ntt_inverse #(
   logic [WIDTH-1:0] mem_bank_a[0:BANKS-1][0:BANK_DEPTH-1];
   logic [WIDTH-1:0] mem_bank_b[0:BANKS-1][0:BANK_DEPTH-1];
 
-  // Address generation
   logic [PARALLEL-1:0][ADDR_WIDTH-1:0] addr0;
   logic [PARALLEL-1:0][ADDR_WIDTH-1:0] addr1;
   logic [PARALLEL-1:0][ADDR_WIDTH-1:0] twiddle_addr;
@@ -96,10 +88,9 @@ module ntt_inverse #(
   logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr0_out_index;
   logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr1_out_index;
 
-  // Total pipeline depth: MULT_PIPELINE (butterfly) + 1 (BRAM read latency)
   localparam int BRAM_LATENCY = 1;
   localparam int TOTAL_PIPE_DEPTH = MULT_PIPELINE + BRAM_LATENCY;
-  
+
   logic [PARALLEL-1:0][BANK_ADDR_WIDTH-1:0] addr0_out_bank_pipe[0:TOTAL_PIPE_DEPTH];
   logic [PARALLEL-1:0][BANK_ADDR_WIDTH-1:0] addr1_out_bank_pipe[0:TOTAL_PIPE_DEPTH];
   logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr0_out_index_pipe[0:TOTAL_PIPE_DEPTH];
@@ -107,28 +98,21 @@ module ntt_inverse #(
   logic [PARALLEL-1:0] lane_valid_pipe[0:TOTAL_PIPE_DEPTH];
   logic read_bank_sel;
   logic write_bank_sel;
-  logic [TOTAL_PIPE_DEPTH:0] write_bank_sel_pipe;  // Packed array
+  logic [TOTAL_PIPE_DEPTH:0] write_bank_sel_pipe;
   localparam int OUTPUT_BANK = (LOGN % 2 == 0) ? 0 : 1;
 
-  // Butterfly signals
-  logic [PARALLEL-1:0][WIDTH-1:0] a_in_comb;   // Combinational read from memory
-  logic [PARALLEL-1:0][WIDTH-1:0] b_in_comb;   // Combinational read from memory
-  logic [PARALLEL-1:0][WIDTH-1:0] a_in;        // Registered to match BRAM twiddle latency
-  logic [PARALLEL-1:0][WIDTH-1:0] b_in;        // Registered to match BRAM twiddle latency
-  logic [PARALLEL-1:0][WIDTH-1:0] twiddle;     // From BRAM (1-cycle latency)
+  logic [PARALLEL-1:0][WIDTH-1:0] a_in_comb;
+  logic [PARALLEL-1:0][WIDTH-1:0] b_in_comb;
+  logic [PARALLEL-1:0][WIDTH-1:0] a_in;
+  logic [PARALLEL-1:0][WIDTH-1:0] b_in;
+  logic [PARALLEL-1:0][WIDTH-1:0] twiddle;
   logic [PARALLEL-1:0][WIDTH-1:0] a_out;
   logic [PARALLEL-1:0][WIDTH-1:0] b_out;
 
-  // Scaling logic
-  logic [ADDR_WIDTH:0] scale_addr;  // 9 bits: 0-256
-  logic [   WIDTH-1:0] scale_result;
+  logic [ADDR_WIDTH:0] scale_addr;
+  logic [WIDTH-1:0] scale_result;
   logic [ADDR_WIDTH:0] scale_addr_pipe[0:MULT_PIPELINE];
   logic [MULT_PIPELINE:0] scale_valid_pipe;
-
-
-  //============================================================================
-  // State Machine
-  //============================================================================
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) state <= IDLE;
@@ -161,14 +145,10 @@ module ntt_inverse #(
     endcase
   end
 
-  // Outputs
   assign done = (state == DONE_STATE);
   assign busy = (state != IDLE) && (state != DONE_STATE);
-
-  // Start INTT when entering INTT_COMPUTE state
   assign intt_start = (state == IDLE && start);
 
-  // Latch INTT completion until pipeline drains
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       intt_done_latched <= 1'b0;
@@ -182,10 +162,6 @@ module ntt_inverse #(
       end
     end
   end
-
-  //============================================================================
-  // Scaling Counter
-  //============================================================================
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
@@ -212,10 +188,6 @@ module ntt_inverse #(
     end
   end
 
-  //============================================================================
-  // Memory Interface
-  //============================================================================
-
   function automatic [BANK_ADDR_WIDTH-1:0] bank_sel(input logic [ADDR_WIDTH-1:0] addr);
     return addr % BANKS;
   endfunction
@@ -232,11 +204,9 @@ module ntt_inverse #(
     return addr / BANKS;
   endfunction
 
-  // Temporary variables for scaling address computation
   logic [ADDR_WIDTH-1:0] scale_read_addr;
   assign scale_read_addr = scale_addr[ADDR_WIDTH-1:0];
 
-  // Read interface (synchronous)
   always_ff @(posedge clk) begin
     if (OUTPUT_BANK == 0) begin
       read_data <= mem_bank_a[bank_sel(read_addr)][bank_index(read_addr)];
@@ -248,7 +218,6 @@ module ntt_inverse #(
   assign read_bank_sel = stage[0];
   assign write_bank_sel = ~stage[0];
 
-  // Address generation for each lane (Constant-Geometry)
   always_comb begin
     int unsigned block_size_int;
 
@@ -304,20 +273,18 @@ module ntt_inverse #(
     end
   end
 
-  // Twiddle factor BRAM (8 parallel read ports via 4 dual-port BRAMs)
   twiddle_bram_multiport #(
-      .DEPTH     (N),
-      .WIDTH     (WIDTH),
-      .PARALLEL  (PARALLEL),
+      .DEPTH(N),
+      .WIDTH(WIDTH),
+      .PARALLEL(PARALLEL),
       .ADDR_WIDTH(ADDR_WIDTH),
-      .HEX_FILE  (TWIDDLE_FILE)
+      .HEX_FILE(TWIDDLE_FILE)
   ) u_twiddle_bram (
-      .clk (clk),
+      .clk(clk),
       .addr(twiddle_addr),
       .data(twiddle)
   );
 
-  // Combinational reads from coefficient memory
   always_comb begin
     for (int lane = 0; lane < PARALLEL; lane++) begin
       if (read_bank_sel) begin
@@ -330,7 +297,6 @@ module ntt_inverse #(
     end
   end
 
-  // Register coefficient reads to match BRAM twiddle latency (1 cycle)
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       for (int lane = 0; lane < PARALLEL; lane++) begin
@@ -343,10 +309,9 @@ module ntt_inverse #(
     end
   end
 
-  // Pipeline address/valid alignment for mult latency + BRAM latency
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      write_bank_sel_pipe <= '0;  // Packed array reset
+      write_bank_sel_pipe <= '0;
       for (int stage_idx = 0; stage_idx <= TOTAL_PIPE_DEPTH; stage_idx++) begin
         for (int lane_idx = 0; lane_idx < PARALLEL; lane_idx++) begin
           addr0_out_bank_pipe[stage_idx][lane_idx] <= '0;
@@ -363,6 +328,7 @@ module ntt_inverse #(
       addr1_out_index_pipe[0] <= addr1_out_index;
       lane_valid_pipe[0] <= lane_valid;
       write_bank_sel_pipe[0] <= write_bank_sel;
+
       for (int stage_idx = 1; stage_idx <= TOTAL_PIPE_DEPTH; stage_idx++) begin
         addr0_out_bank_pipe[stage_idx] <= addr0_out_bank_pipe[stage_idx - 1];
         addr1_out_bank_pipe[stage_idx] <= addr1_out_bank_pipe[stage_idx - 1];
@@ -370,15 +336,12 @@ module ntt_inverse #(
         addr1_out_index_pipe[stage_idx] <= addr1_out_index_pipe[stage_idx - 1];
         lane_valid_pipe[stage_idx] <= lane_valid_pipe[stage_idx - 1];
       end
-      // Shift packed write_bank_sel_pipe
       write_bank_sel_pipe[TOTAL_PIPE_DEPTH:1] <= write_bank_sel_pipe[TOTAL_PIPE_DEPTH-1:0];
     end
   end
 
-  // Butterflies
-  genvar lane;
   generate
-    for (lane = 0; lane < PARALLEL; lane++) begin : gen_inv_butterflies
+    for (genvar lane = 0; lane < PARALLEL; lane++) begin : gen_inv_butterflies
       ntt_butterfly #(
           .WIDTH         (WIDTH),
           .Q             (Q),
@@ -396,7 +359,6 @@ module ntt_inverse #(
     end
   endgenerate
 
-  // Write-back results / load coefficients
   always_ff @(posedge clk) begin
     if (load_coeff && state == IDLE) begin
       mem_bank_a[bank_sel(bit_reverse(load_addr))][bank_index(bit_reverse(load_addr))] <= load_data;
@@ -427,15 +389,9 @@ module ntt_inverse #(
     end
   end
 
-  //============================================================================
-  // Scaling Logic
-  //============================================================================
-  // Multiply each coefficient by N^(-1) = 8347681
-
   logic [WIDTH-1:0] scaling_factor;
   assign scaling_factor = N_INV;
 
-  // Modular multiplication for scaling
   logic [WIDTH-1:0] scale_read_data;
   assign scale_read_data = (OUTPUT_BANK == 0)
                                ? mem_bank_a[bank_sel(scale_read_addr)][bank_index(scale_read_addr)]
@@ -454,7 +410,6 @@ module ntt_inverse #(
       .result(scale_result)
   );
 
-  // Control FSM (parallel scheduling)
   ntt_control_parallel #(
       .N             (N),
       .PARALLEL      (PARALLEL),
@@ -463,7 +418,7 @@ module ntt_inverse #(
       .clk        (clk),
       .rst_n      (rst_n),
       .start      (intt_start),
-      .stall      (1'b0),  // No stall - twiddles are precomputed in BRAM
+      .stall      (1'b0),
       .done       (intt_done),
       .busy       (intt_busy),
       .draining   (ctrl_draining),

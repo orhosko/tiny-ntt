@@ -10,9 +10,10 @@ each stage.
 import cocotb
 from cocotb.triggers import RisingEdge, Timer
 from cocotb.clock import Clock
+import os
 
 # NTT parameters (must match DUT defaults)
-N = 256
+N = int(os.getenv("NTT_N", "1024"))
 PARALLEL = 8
 PIPELINE_DEPTH = 3  # Default value in ntt_control_parallel
 TOTAL_BUTTERFLIES = N // 2

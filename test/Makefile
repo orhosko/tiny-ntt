@@ -20,8 +20,8 @@ WAVES ?= 0
 export WAVES
 
 export PYTHONPATH := $(PWD):$(PYTHONPATH)
-TWIDDLE_FORWARD_SRC ?= $(PWD)/../rtl/twiddle_forward_1024.hex
-TWIDDLE_INVERSE_SRC ?= $(PWD)/../rtl/twiddle_inverse_1024.hex
+TWIDDLE_FORWARD_SRC ?= $(PWD)/../rtl/twiddle_forward_4096.hex
+TWIDDLE_INVERSE_SRC ?= $(PWD)/../rtl/twiddle_inverse_4096.hex
 NTT_PARAM_ARGS ?=
 
 ifeq ($(SIM),verilator)
@@ -43,6 +43,8 @@ copy-hex-files:
 	@cp -f $(TWIDDLE_INVERSE_SRC) $(PWD)/$(notdir $(TWIDDLE_INVERSE_SRC)) 2>/dev/null || true
 	@cp -f $(TWIDDLE_FORWARD_SRC) $(PWD)/twiddle_forward.hex 2>/dev/null || true
 	@cp -f $(TWIDDLE_INVERSE_SRC) $(PWD)/twiddle_inverse.hex 2>/dev/null || true
+	@cp -f $(TWIDDLE_FORWARD_SRC) $(PWD)/twiddle_forward_1024.hex 2>/dev/null || true
+	@cp -f $(TWIDDLE_INVERSE_SRC) $(PWD)/twiddle_inverse_1024.hex 2>/dev/null || true
 
 # Test targets
 .PHONY: help test-mod-add test-mod-sub test-ntt-mult test-all clean
@@ -57,9 +59,16 @@ help:
 	@echo "  make test-ntt-mult     - Test NTT pointwise multiplication"
 	@echo "  make test-ntt-control  - Test NTT control FSM"
 	@echo "  make test-ntt-poly     - Test NTT polynomial multiply"
+	@echo "  make test-all-1024     - Run the full test suite with 1024-point NTT integration tests"
+	@echo "  make test-all-4096     - Run the full test suite with 4096-point NTT integration tests"
+	@echo "  make test-ntt-control-1024 - Test NTT control FSM with N=1024"
+	@echo "  make test-ntt-control-4096 - Test NTT control FSM with N=4096"
 	@echo "  make test-ntt-forward-1024 - Test NTT forward transform with N=1024"
 	@echo "  make test-ntt-inverse-1024 - Test NTT inverse transform with N=1024"
 	@echo "  make test-ntt-poly-1024    - Test NTT polynomial multiply with N=1024"
+	@echo "  make test-ntt-forward-4096 - Test NTT forward transform with N=4096"
+	@echo "  make test-ntt-inverse-4096 - Test NTT inverse transform with N=4096"
+	@echo "  make test-ntt-poly-4096    - Test NTT polynomial multiply with N=4096"
 	@echo "  make test-all          - Run all tests"
 	@echo "  make clean             - Clean build artifacts"
 	@echo ""
@@ -158,6 +167,7 @@ test-ntt-control: clean
 	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
 		MODULE=cocotb_tests.test_ntt_control \
 		TOPLEVEL=ntt_control_parallel \
+		COMPILE_ARGS='$(COMPILE_ARGS) $(NTT_PARAM_ARGS)' \
 		VERILOG_SOURCES="$(PWD)/../rtl/ntt_control_parallel.v" \
 		sim
 
@@ -229,8 +239,18 @@ test-ntt-inverse: clean copy-hex-files
 		MODULE=cocotb_tests.test_ntt_inverse \
 		TOPLEVEL=ntt_inverse \
 		COMPILE_ARGS='$(COMPILE_ARGS) $(NTT_PARAM_ARGS)' \
-		VERILOG_SOURCES="$(PWD)/../rtl/ntt_inverse.v $(PWD)/../rtl/ntt_control_parallel.v $(PWD)/../rtl/twiddle_bram.v $(PWD)/../rtl/twiddle_bram_multiport.v $(PWD)/../rtl/ntt_butterfly.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/mod_add.v $(PWD)/../rtl/mod_sub.v $(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/montgomery_reduction.v" \
+		VERILOG_SOURCES="$(PWD)/../rtl/ntt_inverse.v $(PWD)/../rtl/ntt_control_parallel.v $(PWD)/../rtl/ntt_coeff_banks.v $(PWD)/../rtl/ntt_coeff_bank_single.v $(PWD)/../rtl/ntt_cg_address_gen.v $(PWD)/../rtl/ntt_bank_switch.v $(PWD)/../rtl/twiddle_bram.v $(PWD)/../rtl/twiddle_bram_multiport.v $(PWD)/../rtl/ntt_butterfly.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/mod_add.v $(PWD)/../rtl/mod_sub.v $(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/montgomery_reduction.v" \
 		sim
+
+test-ntt-control-1024:
+	@$(MAKE) test-ntt-control \
+		NTT_N=1024 \
+		NTT_PARAM_ARGS="-Pntt_control_parallel.N=1024"
+
+test-ntt-control-4096:
+	@$(MAKE) test-ntt-control \
+		NTT_N=4096 \
+		NTT_PARAM_ARGS="-Pntt_control_parallel.N=4096"
 
 test-ntt-forward-1024:
 	@$(MAKE) test-ntt-forward \
@@ -252,6 +272,89 @@ test-ntt-poly-1024:
 		TWIDDLE_INVERSE_SRC=$(PWD)/../rtl/twiddle_inverse_1024.hex \
 		NTT_N=1024 NTT_Q=8380417 NTT_PSI=5548360 \
 		NTT_PARAM_ARGS="-Pntt_poly_mult.N=1024 -Pntt_poly_mult.ADDR_WIDTH=10 -Pntt_poly_mult.PSI=5548360 -Pntt_poly_mult.PSI_INV=2320879 -Pntt_poly_mult.N_INV=8372233"
+
+test-ntt-forward-4096:
+	@$(MAKE) test-ntt-forward \
+		TWIDDLE_FORWARD_SRC=$(PWD)/../rtl/twiddle_forward_4096.hex \
+		TWIDDLE_INVERSE_SRC=$(PWD)/../rtl/twiddle_inverse_4096.hex \
+		NTT_N=4096 NTT_Q=8380417 NTT_PSI=283817 \
+		NTT_PARAM_ARGS="-Pntt_forward.N=4096 -Pntt_forward.ADDR_WIDTH=12 -Pntt_forward.PSI=283817 -Ptwiddle_bram_multiport.DEPTH=4096 -Ptwiddle_bram_multiport.ADDR_WIDTH=12 -Ptwiddle_bram.DEPTH=4096 -Ptwiddle_bram.ADDR_WIDTH=12 -Pntt_coeff_banks.N=4096 -Pntt_cg_address_gen.N=4096 -Pntt_control_parallel.N=4096 -Pntt_bank_switch.LOGN=12"
+
+test-ntt-inverse-4096:
+	@$(MAKE) test-ntt-inverse \
+		TWIDDLE_FORWARD_SRC=$(PWD)/../rtl/twiddle_forward_4096.hex \
+		TWIDDLE_INVERSE_SRC=$(PWD)/../rtl/twiddle_inverse_4096.hex \
+		NTT_N=4096 NTT_Q=8380417 NTT_PSI=283817 \
+		NTT_PARAM_ARGS="-Pntt_inverse.N=4096 -Pntt_inverse.ADDR_WIDTH=12 -Pntt_inverse.PSI_INV=7893065 -Pntt_inverse.N_INV=8378371 -Ptwiddle_bram_multiport.DEPTH=4096 -Ptwiddle_bram_multiport.ADDR_WIDTH=12 -Ptwiddle_bram.DEPTH=4096 -Ptwiddle_bram.ADDR_WIDTH=12 -Pntt_coeff_banks.N=4096 -Pntt_cg_address_gen.N=4096 -Pntt_control_parallel.N=4096 -Pntt_bank_switch.LOGN=12"
+
+test-ntt-poly-4096:
+	@$(MAKE) test-ntt-poly \
+		TWIDDLE_FORWARD_SRC=$(PWD)/../rtl/twiddle_forward_4096.hex \
+		TWIDDLE_INVERSE_SRC=$(PWD)/../rtl/twiddle_inverse_4096.hex \
+		NTT_N=4096 NTT_Q=8380417 NTT_PSI=283817 \
+		NTT_PARAM_ARGS="-Pntt_poly_mult.N=4096 -Pntt_poly_mult.ADDR_WIDTH=12 -Pntt_poly_mult.PSI=283817 -Pntt_poly_mult.PSI_INV=7893065 -Pntt_poly_mult.N_INV=8378371 -Ptwiddle_bram_multiport.DEPTH=4096 -Ptwiddle_bram_multiport.ADDR_WIDTH=12 -Ptwiddle_bram.DEPTH=4096 -Ptwiddle_bram.ADDR_WIDTH=12 -Pntt_coeff_banks.N=4096 -Pntt_cg_address_gen.N=4096 -Pntt_control_parallel.N=4096 -Pntt_bank_switch.LOGN=12"
+
+test-all-1024: clean
+	@echo ""
+	@echo "======================================================================"
+	@echo " Running full 1024-point test suite"
+	@echo "======================================================================"
+	@$(MAKE) test-mod-add
+	@echo ""
+	@$(MAKE) test-mod-sub
+	@echo ""
+	@$(MAKE) test-twiddle-rom
+	@echo ""
+	@$(MAKE) test-coeff-ram
+	@echo ""
+	@$(MAKE) test-butterfly
+	@echo ""
+	@$(MAKE) test-butterfly-inverse
+	@echo ""
+	@$(MAKE) test-ntt-mult
+	@echo ""
+	@$(MAKE) test-ntt-control-1024
+	@echo ""
+	@$(MAKE) test-ntt-inverse-1024
+	@echo ""
+	@$(MAKE) test-ntt-forward-1024
+	@echo ""
+	@$(MAKE) test-ntt-poly-1024
+	@echo ""
+	@echo "======================================================================"
+	@echo " 1024-point test suite completed!"
+	@echo "======================================================================"
+
+test-all-4096: clean
+	@echo ""
+	@echo "======================================================================"
+	@echo " Running full 4096-point test suite"
+	@echo "======================================================================"
+	@$(MAKE) test-mod-add
+	@echo ""
+	@$(MAKE) test-mod-sub
+	@echo ""
+	@$(MAKE) test-twiddle-rom
+	@echo ""
+	@$(MAKE) test-coeff-ram
+	@echo ""
+	@$(MAKE) test-butterfly
+	@echo ""
+	@$(MAKE) test-butterfly-inverse
+	@echo ""
+	@$(MAKE) test-ntt-mult
+	@echo ""
+	@$(MAKE) test-ntt-control-4096
+	@echo ""
+	@$(MAKE) test-ntt-inverse-4096
+	@echo ""
+	@$(MAKE) test-ntt-forward-4096
+	@echo ""
+	@$(MAKE) test-ntt-poly-4096
+	@echo ""
+	@echo "======================================================================"
+	@echo " 4096-point test suite completed!"
+	@echo "======================================================================"
 
 # Clean target
 clean::

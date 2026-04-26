@@ -19,6 +19,9 @@ module ntt_coeff_banks #(
     input  wire [WIDTH-1:0]                 load_data,
     input  wire [ADDR_WIDTH-1:0]            read_addr,
     output reg  [WIDTH-1:0]                 read_data,
+    input  wire                             ext_write_enable,
+    input  wire [ADDR_WIDTH-1:0]            ext_write_addr,
+    input  wire [WIDTH-1:0]                 ext_write_data,
     input  wire                             read_bank_sel,
     input  wire [PARALLEL*BANK_ADDR_WIDTH-1:0]  rd_bank_a,
     input  wire [PARALLEL*BANK_DEPTH_WIDTH-1:0] rd_index_a,
@@ -89,12 +92,16 @@ module ntt_coeff_banks #(
   wire [ADDR_WIDTH-1:0] load_addr_br;
   wire [BANK_ADDR_WIDTH-1:0] load_bank;
   wire [BANK_DEPTH_WIDTH-1:0] load_index;
+  wire [BANK_ADDR_WIDTH-1:0] ext_wr_bank;
+  wire [BANK_DEPTH_WIDTH-1:0] ext_wr_index;
 
   assign ext_rd_bank = get_bank(read_addr);
   assign ext_rd_index = get_index(read_addr);
   assign load_addr_br = bit_reverse(load_addr);
   assign load_bank = get_bank(load_addr_br);
   assign load_index = get_index(load_addr_br);
+  assign ext_wr_bank = get_bank(ext_write_addr);
+  assign ext_wr_index = get_index(ext_write_addr);
 
   genvar b;
   generate
@@ -195,6 +202,16 @@ module ntt_coeff_banks #(
       bank_wr_en_1_a[load_bank] = 1'b1;
       bank_wr_addr_1_a[load_bank] = load_index;
       bank_wr_data_1_a[load_bank] = load_data;
+    end else if (ext_write_enable) begin
+      if (OUTPUT_BANK == 0) begin
+        bank_wr_en_1_a[ext_wr_bank] = 1'b1;
+        bank_wr_addr_1_a[ext_wr_bank] = ext_wr_index;
+        bank_wr_data_1_a[ext_wr_bank] = ext_write_data;
+      end else begin
+        bank_wr_en_1_b[ext_wr_bank] = 1'b1;
+        bank_wr_addr_1_b[ext_wr_bank] = ext_wr_index;
+        bank_wr_data_1_b[ext_wr_bank] = ext_write_data;
+      end
     end else if (write_enable) begin
       for (li = 0; li < PARALLEL; li = li + 1) begin
         if (wr_valid[li]) begin

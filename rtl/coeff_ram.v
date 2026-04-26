@@ -20,7 +20,7 @@ module coeff_ram #(
 );
 
   integer i;
-  reg [WIDTH-1:0] mem [0:DEPTH-1];
+  (* ram_style = "block" *) reg [WIDTH-1:0] mem [0:DEPTH-1];
 
   initial begin
     for (i = 0; i < DEPTH; i = i + 1)

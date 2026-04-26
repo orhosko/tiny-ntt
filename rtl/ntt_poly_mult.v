@@ -40,24 +40,21 @@ module ntt_poly_mult #(
     output logic fwd_started,
     output logic inv_started,
 
-    // Load interface
     input  logic                  load_coeff,
     input  logic                  load_sel,
     input  logic [ADDR_WIDTH-1:0] load_addr,
     input  logic [WIDTH-1:0]      load_data,
 
-    // Debug read interface (A/B memory)
     input  logic                  debug_read_sel,
     input  logic [ADDR_WIDTH-1:0] debug_read_addr,
     output logic [WIDTH-1:0]      debug_read_data,
 
-    // Read interface (result)
     input  logic [ADDR_WIDTH-1:0] read_addr,
     output logic [WIDTH-1:0]      read_data
 );
 
-  localparam int TOTAL_BUTTERFLIES = N / 2;
   localparam int READ_COUNT_WIDTH = $clog2(N + 1);
+  localparam int C_RAM_READ_LATENCY = 1;
 
   typedef enum logic [3:0] {
     IDLE,
@@ -118,6 +115,11 @@ module ntt_poly_mult #(
   logic [WIDTH-1:0] mul_a;
   logic [WIDTH-1:0] mul_b;
   logic [WIDTH-1:0] mul_result;
+  logic [WIDTH-1:0] c_ntt_dout_b;
+  logic [ADDR_WIDTH-1:0] c_ntt_addr_b;
+  logic c_ntt_we_a;
+  logic [ADDR_WIDTH-1:0] c_ntt_wr_addr;
+  logic [WIDTH-1:0] c_ntt_wr_data;
   logic [N*WIDTH-1:0] a_ntt_flat;
   logic [N*WIDTH-1:0] b_ntt_flat;
   logic [N*WIDTH-1:0] c_ntt_flat;
@@ -207,6 +209,23 @@ module ntt_poly_mult #(
           .poly_c_flat(c_ntt_flat)
       );
     end else begin : gen_pointwise_serial
+      coeff_ram #(
+          .WIDTH(WIDTH),
+          .DEPTH(N),
+          .ADDR_WIDTH(ADDR_WIDTH)
+      ) u_c_ntt_mem (
+          .clk(clk),
+          .rst_n(rst_n),
+          .addr_a(c_ntt_wr_addr),
+          .din_a(c_ntt_wr_data),
+          .dout_a(),
+          .we_a(c_ntt_we_a),
+          .addr_b(c_ntt_addr_b),
+          .din_b('0),
+          .dout_b(c_ntt_dout_b),
+          .we_b(1'b0)
+      );
+
       mod_mult #(
           .WIDTH(WIDTH),
           .Q(Q),
@@ -256,9 +275,20 @@ module ntt_poly_mult #(
       end
 
       case (state)
-        LOAD_A, LOAD_B, LOAD_INV: begin
+        LOAD_A, LOAD_B: begin
           if (load_index < N) begin
             load_index <= load_index + 1'b1;
+          end
+        end
+        LOAD_INV: begin
+          if (POINTWISE_PARALLEL) begin
+            if (load_index < N) begin
+              load_index <= load_index + 1'b1;
+            end
+          end else begin
+            if (load_index <= N) begin
+              load_index <= load_index + 1'b1;
+            end
           end
         end
         READ_A: begin
@@ -355,7 +385,7 @@ module ntt_poly_mult #(
                 if (point_index == MULT_PIPELINE[READ_COUNT_WIDTH-1:0]) begin
                   c_ntt[i] <= c_ntt_parallel[i];
                 end
-              end else begin
+              end else if (1'b0) begin
                 if (MULT_PIPELINE == 0) begin
                   if (point_index < N && point_index == READ_COUNT_WIDTH'(i)) begin
                     c_ntt[i] <= mul_result;
@@ -411,7 +441,11 @@ module ntt_poly_mult #(
         end
       end
       LOAD_INV: begin
-        if (load_index >= N) next_state = RUN_INV;
+        if (POINTWISE_PARALLEL) begin
+          if (load_index >= N) next_state = RUN_INV;
+        end else begin
+          if (load_index > N) next_state = RUN_INV;
+        end
       end
       RUN_INV: begin
         if (inv_done) next_state = DONE_STATE;
@@ -442,9 +476,23 @@ module ntt_poly_mult #(
   assign mul_b = (point_index < N) ? b_ntt[point_index] : '0;
 
   assign inv_start = (state == RUN_INV) && !inv_started;
-  assign inv_load = (state == LOAD_INV) && (load_index < N);
-  assign inv_load_addr = load_index[ADDR_WIDTH-1:0];
-  assign inv_load_data = (load_index < N) ? c_ntt[load_index] : '0;
+  assign c_ntt_we_a = !POINTWISE_PARALLEL &&
+                      ((MULT_PIPELINE == 0) ? (state == POINTWISE && point_index < N)
+                                            : mul_valid_pipe[MULT_PIPELINE]);
+  assign c_ntt_wr_addr = (MULT_PIPELINE == 0) ? point_index[ADDR_WIDTH-1:0]
+                                              : mul_index_pipe[MULT_PIPELINE][ADDR_WIDTH-1:0];
+  assign c_ntt_wr_data = mul_result;
+  assign c_ntt_addr_b = (!POINTWISE_PARALLEL && state == LOAD_INV && load_index < N)
+                        ? load_index[ADDR_WIDTH-1:0] : '0;
+
+  assign inv_load = POINTWISE_PARALLEL ? ((state == LOAD_INV) && (load_index < N))
+                                       : ((state == LOAD_INV) &&
+                                          (load_index >= C_RAM_READ_LATENCY) &&
+                                          (load_index <= N));
+  assign inv_load_addr = POINTWISE_PARALLEL ? load_index[ADDR_WIDTH-1:0]
+                                            : (load_index[ADDR_WIDTH-1:0] - C_RAM_READ_LATENCY);
+  assign inv_load_data = POINTWISE_PARALLEL ? ((load_index < N) ? c_ntt[load_index] : '0)
+                                            : c_ntt_dout_b;
 
   assign inv_read_addr = (state == DONE_STATE || state == IDLE) ? read_addr : '0;
   assign read_data = inv_read_data;

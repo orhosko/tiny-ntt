@@ -120,7 +120,7 @@ module ntt_inverse #(
   assign scale_write_enable = scale_valid_pipe[SCALE_PIPE_DEPTH];
   assign scale_write_addr = scale_addr_pipe[SCALE_PIPE_DEPTH][ADDR_WIDTH-1:0];
 
-  always_ff @(posedge clk or negedge rst_n) begin
+  always_ff @(posedge clk) begin
     if (!rst_n)
       state <= IDLE;
     else
@@ -153,7 +153,7 @@ module ntt_inverse #(
     endcase
   end
 
-  always_ff @(posedge clk or negedge rst_n) begin
+  always_ff @(posedge clk) begin
     if (!rst_n) begin
       intt_done_latched <= 1'b0;
     end else if (state != INTT_COMPUTE) begin
@@ -166,7 +166,7 @@ module ntt_inverse #(
     end
   end
 
-  always_ff @(posedge clk or negedge rst_n) begin
+  always_ff @(posedge clk) begin
     integer stage_idx;
     if (!rst_n) begin
       scale_addr <= '0;
@@ -305,7 +305,7 @@ module ntt_inverse #(
   );
 
   integer pipe_stage_idx;
-  always_ff @(posedge clk or negedge rst_n) begin
+  always_ff @(posedge clk) begin
     if (!rst_n) begin
       coeff_a <= '0;
       coeff_b <= '0;

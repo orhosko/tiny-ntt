@@ -190,7 +190,7 @@ module ntt_forward #(
   );
 
   integer stage_idx;
-  always @(posedge clk or negedge rst_n) begin
+  always @(posedge clk) begin
     if (!rst_n) begin
       coeff_a <= 0;
       coeff_b <= 0;
@@ -242,7 +242,7 @@ module ntt_forward #(
     end
   endgenerate
 
-  always @(posedge clk or negedge rst_n) begin
+  always @(posedge clk) begin
     if (!rst_n)
       ctrl_done_latched <= 1'b0;
     else begin

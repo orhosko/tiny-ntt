@@ -63,24 +63,19 @@ module mod_mult #(
       reg [2*MOD_WIDTH-1:0] mult_stage2_reg;
       reg [WIDTH-1:0]       result_reg;
 
-      always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-          a_reg          <= 0;
-          b_reg          <= 0;
-          mult_stage1_reg <= 0;
-          mult_stage2_reg <= 0;
-          result_reg     <= 0;
-        end else begin
-          a_reg           <= a_trim;
-          b_reg           <= b_trim;
-          mult_stage1_reg <= a_reg * b_reg;
-          mult_stage2_reg <= mult_stage1_reg;
-          result_reg      <= result_comb;
-        end
+      // Leave the arithmetic pipeline unreset so DSP/register packing is not
+      // blocked by asynchronous reset logic. The module output is still held
+      // at zero while rst_n is low.
+      always @(posedge clk) begin
+        a_reg           <= a_trim;
+        b_reg           <= b_trim;
+        mult_stage1_reg <= a_reg * b_reg;
+        mult_stage2_reg <= mult_stage1_reg;
+        result_reg      <= result_comb;
       end
 
       assign mult_result   = mult_stage2_reg;
-      assign result        = result_reg;
+      assign result        = rst_n ? result_reg : {WIDTH{1'b0}};
     end
   endgenerate
 

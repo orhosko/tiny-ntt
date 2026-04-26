@@ -49,10 +49,11 @@ module twiddle_bram_multiport #(
   generate
     for (i = 0; i < NUM_BRAMS; i = i + 1) begin : gen_brams
       twiddle_bram #(
-          .WIDTH     (WIDTH),
-          .DEPTH     (DEPTH),
-          .ADDR_WIDTH(ADDR_WIDTH),
-          .HEX_FILE  (HEX_FILE)
+          .WIDTH             (WIDTH),
+          .DEPTH             (DEPTH),
+          .ADDR_WIDTH        (ADDR_WIDTH),
+          .HEX_FILE          (HEX_FILE),
+          .OUTPUT_PIPE_STAGES(OUTPUT_PIPE_STAGES)
       ) u_bram (
           .clk   (clk),
           .addr_a(addr_a_arr[i]),

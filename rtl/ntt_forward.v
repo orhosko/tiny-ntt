@@ -30,7 +30,7 @@ module ntt_forward #(
   localparam BANK_ADDR_WIDTH = $clog2(BANKS);
   localparam BANK_DEPTH_WIDTH = $clog2(BANK_DEPTH);
   localparam OUTPUT_BANK = (LOGN % 2 == 0) ? 0 : 1;
-  localparam BRAM_LATENCY = 1;
+  localparam BRAM_LATENCY = 2;
   localparam TOTAL_PIPE_DEPTH = MULT_PIPELINE + BRAM_LATENCY;
 
   wire [LOGN-1:0] stage;
@@ -62,8 +62,10 @@ module ntt_forward #(
   reg [PARALLEL*BANK_DEPTH_WIDTH-1:0] addr1_out_index_pipe [0:TOTAL_PIPE_DEPTH];
   reg [PARALLEL-1:0] lane_valid_pipe [0:TOTAL_PIPE_DEPTH];
 
-  wire [PARALLEL*WIDTH-1:0] coeff_a;
-  wire [PARALLEL*WIDTH-1:0] coeff_b;
+  wire [PARALLEL*WIDTH-1:0] coeff_a_raw;
+  wire [PARALLEL*WIDTH-1:0] coeff_b_raw;
+  reg [PARALLEL*WIDTH-1:0] coeff_a;
+  reg [PARALLEL*WIDTH-1:0] coeff_b;
   wire [PARALLEL*WIDTH-1:0] a_out;
   wire [PARALLEL*WIDTH-1:0] b_out;
   wire [PARALLEL*WIDTH-1:0] twiddle;
@@ -99,7 +101,8 @@ module ntt_forward #(
       .WIDTH(WIDTH),
       .PARALLEL(PARALLEL),
       .ADDR_WIDTH(ADDR_WIDTH),
-      .HEX_FILE(TWIDDLE_FILE)
+      .HEX_FILE(TWIDDLE_FILE),
+      .OUTPUT_PIPE_STAGES(BRAM_LATENCY)
   ) u_twiddle_bram (
       .clk(clk),
       .addr(twiddle_addr),
@@ -173,8 +176,8 @@ module ntt_forward #(
       .rd_index_a(addr0_index),
       .rd_bank_b(addr1_bank),
       .rd_index_b(addr1_index),
-      .coeff_a(coeff_a),
-      .coeff_b(coeff_b),
+      .coeff_a(coeff_a_raw),
+      .coeff_b(coeff_b_raw),
       .write_enable(busy),
       .write_bank_sel(write_bank_sel_pipe[TOTAL_PIPE_DEPTH]),
       .wr_valid(lane_valid_pipe[TOTAL_PIPE_DEPTH]),
@@ -189,6 +192,8 @@ module ntt_forward #(
   integer stage_idx;
   always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
+      coeff_a <= 0;
+      coeff_b <= 0;
       for (stage_idx = 0; stage_idx <= TOTAL_PIPE_DEPTH; stage_idx = stage_idx + 1) begin
         addr0_out_bank_pipe[stage_idx] <= 0;
         addr1_out_bank_pipe[stage_idx] <= 0;
@@ -197,6 +202,8 @@ module ntt_forward #(
         lane_valid_pipe[stage_idx] <= 0;
       end
     end else begin
+      coeff_a <= coeff_a_raw;
+      coeff_b <= coeff_b_raw;
       lane_valid_pipe[0] <= lane_valid;
       if (|lane_valid) begin
         addr0_out_bank_pipe[0] <= addr0_out_bank;

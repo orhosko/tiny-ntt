@@ -27,10 +27,26 @@ module twiddle_bram #(
     end
   end
 
-  always @(posedge clk)
-    data_a <= mem[addr_a];
+  generate
+    if (OUTPUT_PIPE_STAGES <= 1) begin : gen_single_stage
+      always @(posedge clk) begin
+        data_a <= mem[addr_a];
+        data_b <= mem[addr_b];
+      end
+    end else begin : gen_two_stage
+      reg [WIDTH-1:0] mem_q_a;
+      reg [WIDTH-1:0] mem_q_b;
 
-  always @(posedge clk)
-    data_b <= mem[addr_b];
+      // Extra output pipelining improves BRAM read timing. Vivado can often
+      // absorb the first register into the BRAM output path and leave the
+      // second as a fabric stage.
+      always @(posedge clk) begin
+        mem_q_a <= mem[addr_a];
+        mem_q_b <= mem[addr_b];
+        data_a  <= mem_q_a;
+        data_b  <= mem_q_b;
+      end
+    end
+  endgenerate
 
 endmodule

@@ -54,7 +54,7 @@ module ntt_inverse #(
   localparam int BANK_ADDR_WIDTH = $clog2(BANKS);
   localparam int BANK_DEPTH_WIDTH = $clog2(BANK_DEPTH);
   localparam int OUTPUT_BANK = (LOGN % 2 == 0) ? 0 : 1;
-  localparam int BRAM_LATENCY = 1;
+  localparam int BRAM_LATENCY = 2;
   localparam int TOTAL_PIPE_DEPTH = MULT_PIPELINE + BRAM_LATENCY;
   localparam int SCALE_PIPE_DEPTH = MULT_PIPELINE + 1;
 
@@ -90,6 +90,8 @@ module ntt_inverse #(
   logic [PARALLEL*BANK_DEPTH_WIDTH-1:0] addr1_out_index_pipe [0:TOTAL_PIPE_DEPTH];
   logic [PARALLEL-1:0] lane_valid_pipe [0:TOTAL_PIPE_DEPTH];
 
+  logic [PARALLEL*WIDTH-1:0] coeff_a_raw;
+  logic [PARALLEL*WIDTH-1:0] coeff_b_raw;
   logic [PARALLEL*WIDTH-1:0] coeff_a;
   logic [PARALLEL*WIDTH-1:0] coeff_b;
   logic [PARALLEL*WIDTH-1:0] a_out;
@@ -233,11 +235,12 @@ module ntt_inverse #(
   );
 
   twiddle_bram_multiport #(
-      .DEPTH     (N),
-      .WIDTH     (WIDTH),
-      .PARALLEL  (PARALLEL),
-      .ADDR_WIDTH(ADDR_WIDTH),
-      .HEX_FILE  (TWIDDLE_FILE)
+      .DEPTH             (N),
+      .WIDTH             (WIDTH),
+      .PARALLEL          (PARALLEL),
+      .ADDR_WIDTH        (ADDR_WIDTH),
+      .HEX_FILE          (TWIDDLE_FILE),
+      .OUTPUT_PIPE_STAGES(BRAM_LATENCY)
   ) u_twiddle_bram (
       .clk (clk),
       .addr(twiddle_addr),
@@ -288,8 +291,8 @@ module ntt_inverse #(
       .rd_index_a     (addr0_index),
       .rd_bank_b      (addr1_bank),
       .rd_index_b     (addr1_index),
-      .coeff_a        (coeff_a),
-      .coeff_b        (coeff_b),
+      .coeff_a        (coeff_a_raw),
+      .coeff_b        (coeff_b_raw),
       .write_enable   (state == INTT_COMPUTE),
       .write_bank_sel (write_bank_sel_pipe[TOTAL_PIPE_DEPTH]),
       .wr_valid       (lane_valid_pipe[TOTAL_PIPE_DEPTH]),
@@ -304,6 +307,8 @@ module ntt_inverse #(
   integer pipe_stage_idx;
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
+      coeff_a <= '0;
+      coeff_b <= '0;
       for (pipe_stage_idx = 0; pipe_stage_idx <= TOTAL_PIPE_DEPTH; pipe_stage_idx = pipe_stage_idx + 1) begin
         addr0_out_bank_pipe[pipe_stage_idx] <= '0;
         addr1_out_bank_pipe[pipe_stage_idx] <= '0;
@@ -312,6 +317,8 @@ module ntt_inverse #(
         lane_valid_pipe[pipe_stage_idx] <= '0;
       end
     end else begin
+      coeff_a <= coeff_a_raw;
+      coeff_b <= coeff_b_raw;
       lane_valid_pipe[0] <= lane_valid;
       if (lane_valid_any) begin
         addr0_out_bank_pipe[0] <= addr0_out_bank;

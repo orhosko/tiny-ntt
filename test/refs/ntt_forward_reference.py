@@ -5,9 +5,9 @@ Python reference implementation of Constant-Geometry NTT for testing.
 import os
 
 # NTT Parameters
-N = int(os.getenv("NTT_N", "1024"))
+N = int(os.getenv("NTT_N", "4096"))
 Q = int(os.getenv("NTT_Q", "8380417"))
-PSI = int(os.getenv("NTT_PSI", "5548360"))
+PSI = int(os.getenv("NTT_PSI", "283817"))
 OMEGA = pow(PSI, 2, Q)
 
 

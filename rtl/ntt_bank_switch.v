@@ -4,7 +4,7 @@
 // element (index TOTAL_PIPE_DEPTH), since that is the only element used.
 
 module ntt_bank_switch #(
-    parameter LOGN            = 10,
+    parameter LOGN            = 12,
     parameter PARALLEL        = 8,
     parameter MULT_PIPELINE   = 3,
     parameter TOTAL_PIPE_DEPTH = MULT_PIPELINE

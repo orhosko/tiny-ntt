@@ -13,7 +13,7 @@ from cocotb.clock import Clock
 import os
 
 # NTT parameters (must match DUT defaults)
-N = int(os.getenv("NTT_N", "1024"))
+N = int(os.getenv("NTT_N", "4096"))
 PARALLEL = 8
 PIPELINE_DEPTH = 3  # Default value in ntt_control_parallel
 TOTAL_BUTTERFLIES = N // 2

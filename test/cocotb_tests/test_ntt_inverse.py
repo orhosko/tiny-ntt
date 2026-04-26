@@ -15,9 +15,9 @@ from refs.ntt_forward_reference import ntt_forward_reference
 from refs.ntt_inverse_reference import ntt_inverse_reference
 
 # NTT parameters
-N = int(os.getenv("NTT_N", "1024"))
+N = int(os.getenv("NTT_N", "4096"))
 Q = int(os.getenv("NTT_Q", "8380417"))
-PSI = int(os.getenv("NTT_PSI", "5548360"))
+PSI = int(os.getenv("NTT_PSI", "283817"))
 
 async def load_coefficients(dut, coeffs):
     """Load coefficients into RAM"""

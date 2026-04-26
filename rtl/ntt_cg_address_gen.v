@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 
 module ntt_cg_address_gen #(
-    parameter N                = 1024,
+    parameter N                = 4096,
     parameter ADDR_WIDTH       = $clog2(N),
     parameter PARALLEL         = 8,
     parameter BANKS            = 16,

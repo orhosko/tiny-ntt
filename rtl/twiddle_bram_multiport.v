@@ -6,11 +6,12 @@
 // Access: port[lane] -> port[lane*W +: W]
 
 module twiddle_bram_multiport #(
-    parameter DEPTH      = 1024,
+    parameter DEPTH      = 4096,
     parameter WIDTH      = 32,
     parameter PARALLEL   = 8,
     parameter ADDR_WIDTH = $clog2(DEPTH),
-    parameter HEX_FILE   = ""
+    parameter HEX_FILE   = "",
+    parameter OUTPUT_PIPE_STAGES = 2
 ) (
     input  wire                          clk,
     input  wire [PARALLEL*ADDR_WIDTH-1:0] addr,

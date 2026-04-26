@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 
 module ntt_control_parallel #(
-    parameter N              = 1024,
+    parameter N              = 4096,
     parameter PARALLEL       = 8,
     parameter PIPELINE_DEPTH = 3
 ) (

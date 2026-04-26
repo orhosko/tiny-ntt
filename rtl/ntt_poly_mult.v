@@ -13,24 +13,23 @@
 //==============================================================================
 
 module ntt_poly_mult #(
-    parameter int N              = 1024,
-    parameter int WIDTH          = 32,
-    parameter int Q              = 8380417,
-    parameter int ADDR_WIDTH     = $clog2(N),
-    parameter int REDUCTION_TYPE = 1,
-    parameter int PARALLEL       = 1,
-    parameter int PSI            = 5548360,
-    parameter int PSI_INV        = 2320879,
-    parameter int N_INV          = 8372233,
-    parameter     FWD_TWIDDLE_FILE = "twiddle_forward_1024.hex",
-    parameter     INV_TWIDDLE_FILE = "twiddle_inverse_1024.hex",
+    parameter int N                = 4096,
+    parameter int WIDTH            = 32,
+    parameter int Q                = 8380417,
+    parameter int ADDR_WIDTH       = $clog2(N),
+    parameter int REDUCTION_TYPE   = 1,
+    parameter int PARALLEL         = 8,
+    parameter int PSI              = 283817,
+    parameter int PSI_INV          = 7893065,
+    parameter int N_INV            = 8378371,
+    parameter     FWD_TWIDDLE_FILE = "twiddle_forward_4096.hex",
+    parameter     INV_TWIDDLE_FILE = "twiddle_inverse_4096.hex",
     parameter bit POINTWISE_PARALLEL = 1'b0,
-    parameter int MULT_PIPELINE  = 3
+    parameter int MULT_PIPELINE    = 3
 ) (
     input  logic clk,
     input  logic rst_n,
 
-    // Control
     input  logic start,
     output logic done,
     output logic busy,

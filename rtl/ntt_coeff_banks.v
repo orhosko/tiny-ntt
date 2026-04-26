@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 
 module ntt_coeff_banks #(
-    parameter N                = 1024,
+    parameter N                = 4096,
     parameter WIDTH            = 32,
     parameter ADDR_WIDTH       = $clog2(N),
     parameter PARALLEL         = 8,

@@ -3,30 +3,28 @@
 //==============================================================================
 // Inverse NTT Module
 //==============================================================================
-// Complete N=1024 inverse radix-2 Cooley-Tukey NTT pipeline
+// Complete inverse radix-2 Cooley-Tukey NTT pipeline
 //
-// Performs INTT with final scaling by N^(-1) = 8347681
+// Performs INTT with final scaling by N^(-1)
 //
 // Flow:
 //   1. Load NTT-transformed coefficients
 //   2. Run inverse NTT
 //   3. Scale by N^(-1)
 //   4. Read results
-//
-// Twiddle factors are stored in BRAM for efficient resource usage.
 //==============================================================================
 
 module ntt_inverse #(
-    parameter int N              = 1024,
+    parameter int N              = 4096,
     parameter int WIDTH          = 32,
     parameter int Q              = 8380417,
-    parameter int PSI_INV        = 2320879,
+    parameter int PSI_INV        = 7893065,
     parameter int ADDR_WIDTH     = $clog2(N),
     parameter int REDUCTION_TYPE = 0,
-    parameter int N_INV          = 8372233,
+    parameter int N_INV          = 8378371,
     parameter int PARALLEL       = 8,
     parameter int MULT_PIPELINE  = 3,
-    parameter     TWIDDLE_FILE   = "twiddle_inverse_1024.hex"
+    parameter     TWIDDLE_FILE   = "twiddle_inverse_4096.hex"
 ) (
     input  logic                  clk,
     input  logic                  rst_n,

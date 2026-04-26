@@ -2,9 +2,10 @@
 
 module twiddle_bram #(
     parameter WIDTH      = 32,
-    parameter DEPTH      = 1024,
+    parameter DEPTH      = 4096,
     parameter ADDR_WIDTH = $clog2(DEPTH),
-    parameter HEX_FILE   = ""
+    parameter HEX_FILE   = "",
+    parameter OUTPUT_PIPE_STAGES = 2
 ) (
     input  wire                  clk,
 

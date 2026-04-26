@@ -45,6 +45,8 @@ copy-hex-files:
 	@cp -f $(TWIDDLE_INVERSE_SRC) $(PWD)/twiddle_inverse.hex 2>/dev/null || true
 	@cp -f $(TWIDDLE_FORWARD_SRC) $(PWD)/twiddle_forward_1024.hex 2>/dev/null || true
 	@cp -f $(TWIDDLE_INVERSE_SRC) $(PWD)/twiddle_inverse_1024.hex 2>/dev/null || true
+	@cp -f $(TWIDDLE_FORWARD_SRC) $(PWD)/twiddle_forward_4096.hex 2>/dev/null || true
+	@cp -f $(TWIDDLE_INVERSE_SRC) $(PWD)/twiddle_inverse_4096.hex 2>/dev/null || true
 
 # Test targets
 .PHONY: help test-mod-add test-mod-sub test-ntt-mult test-all clean
@@ -181,7 +183,7 @@ test-ntt-poly: clean copy-hex-files
 		MODULE=cocotb_tests.test_ntt_poly_mult \
 		TOPLEVEL=ntt_poly_mult \
 		COMPILE_ARGS='$(COMPILE_ARGS) $(NTT_PARAM_ARGS)' \
-		VERILOG_SOURCES="$(PWD)/../rtl/ntt_poly_mult.v $(PWD)/../rtl/ntt_forward.v $(PWD)/../rtl/ntt_coeff_banks.v $(PWD)/../rtl/ntt_coeff_bank_single.v $(PWD)/../rtl/ntt_cg_address_gen.v $(PWD)/../rtl/twiddle_bram.v $(PWD)/../rtl/twiddle_bram_multiport.v $(PWD)/../rtl/ntt_bank_switch.v $(PWD)/../rtl/ntt_control_parallel.v $(PWD)/../rtl/ntt_inverse.v $(PWD)/../rtl/ntt_pointwise_mult.v $(PWD)/../rtl/twiddle_rom.v $(PWD)/../rtl/ntt_butterfly.v $(PWD)/../rtl/ntt_butterfly_inverse.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/mod_add.v $(PWD)/../rtl/mod_sub.v $(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/montgomery_reduction.v" \
+		VERILOG_SOURCES="$(PWD)/../rtl/ntt_poly_mult.v $(PWD)/../rtl/coeff_ram.v $(PWD)/../rtl/ntt_forward.v $(PWD)/../rtl/ntt_coeff_banks.v $(PWD)/../rtl/ntt_coeff_bank_single.v $(PWD)/../rtl/ntt_cg_address_gen.v $(PWD)/../rtl/twiddle_bram.v $(PWD)/../rtl/twiddle_bram_multiport.v $(PWD)/../rtl/ntt_bank_switch.v $(PWD)/../rtl/ntt_control_parallel.v $(PWD)/../rtl/ntt_inverse.v $(PWD)/../rtl/ntt_pointwise_mult.v $(PWD)/../rtl/twiddle_rom.v $(PWD)/../rtl/ntt_butterfly.v $(PWD)/../rtl/ntt_butterfly_inverse.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/mod_add.v $(PWD)/../rtl/mod_sub.v $(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/montgomery_reduction.v" \
 		sim
 
 # Test NTT forward (full integration)

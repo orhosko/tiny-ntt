@@ -1,15 +1,15 @@
 `timescale 1ns / 1ps
 
 module ntt_forward #(
-    parameter N              = 1024,
+    parameter N              = 4096,
     parameter WIDTH          = 32,
     parameter Q              = 8380417,
-    parameter PSI            = 5548360,
+    parameter PSI            = 283817,
     parameter ADDR_WIDTH     = $clog2(N),
     parameter REDUCTION_TYPE = 0,
     parameter PARALLEL       = 8,
     parameter MULT_PIPELINE  = 3,
-    parameter TWIDDLE_FILE   = "twiddle_forward_1024.hex"
+    parameter TWIDDLE_FILE   = "twiddle_forward_4096.hex"
 ) (
     input  wire                  clk,
     input  wire                  rst_n,

@@ -47,7 +47,7 @@ module ntt_inverse #(
 
   localparam int LOGN = $clog2(N);
   localparam int TOTAL_BUTTERFLIES = N / 2;
-  localparam int BANKS = (N < (PARALLEL * 2)) ? N : (PARALLEL * 2);
+  localparam int BANKS = (N < PARALLEL) ? N : PARALLEL;
   localparam int BANK_DEPTH = (N + BANKS - 1) / BANKS;
   localparam int BANK_ADDR_WIDTH = $clog2(BANKS);
   localparam int BANK_DEPTH_WIDTH = $clog2(BANK_DEPTH);

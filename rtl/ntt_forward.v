@@ -25,7 +25,7 @@ module ntt_forward #(
 
   localparam LOGN = $clog2(N);
   localparam TOTAL_BUTTERFLIES = N / 2;
-  localparam BANKS = (N < (PARALLEL * 2)) ? N : (PARALLEL * 2);
+  localparam BANKS = (N < PARALLEL) ? N : PARALLEL;
   localparam BANK_DEPTH = (N + BANKS - 1) / BANKS;
   localparam BANK_ADDR_WIDTH = $clog2(BANKS);
   localparam BANK_DEPTH_WIDTH = $clog2(BANK_DEPTH);

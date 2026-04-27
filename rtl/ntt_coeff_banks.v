@@ -5,7 +5,7 @@ module ntt_coeff_banks #(
     parameter WIDTH            = 32,
     parameter ADDR_WIDTH       = $clog2(N),
     parameter PARALLEL         = 8,
-    parameter BANKS            = PARALLEL * 2,
+    parameter BANKS            = PARALLEL,
     parameter BANK_DEPTH       = (N + BANKS - 1) / BANKS,
     parameter BANK_ADDR_WIDTH  = $clog2(BANKS),
     parameter BANK_DEPTH_WIDTH = $clog2(BANK_DEPTH),
@@ -66,12 +66,12 @@ module ntt_coeff_banks #(
     end
   endfunction
 
-  wire [BANK_DEPTH_WIDTH-1:0] bank_bf_rd_addr_a [0:BANKS-1];
-  wire [BANK_DEPTH_WIDTH-1:0] bank_bf_rd_addr_b [0:BANKS-1];
-  wire [WIDTH-1:0] bank_bf_rd_data_a [0:BANKS-1];
-  wire [WIDTH-1:0] bank_bf_rd_data_b [0:BANKS-1];
-  wire [WIDTH-1:0] bank_ext_rd_data_a [0:BANKS-1];
-  wire [WIDTH-1:0] bank_ext_rd_data_b [0:BANKS-1];
+  reg  [BANK_DEPTH_WIDTH-1:0] bank_rd_addr_a [0:BANKS-1];
+  reg  [BANK_DEPTH_WIDTH-1:0] bank_rd_addr_b [0:BANKS-1];
+  wire [WIDTH-1:0] bank_rd_data_a_a [0:BANKS-1];
+  wire [WIDTH-1:0] bank_rd_data_b_a [0:BANKS-1];
+  wire [WIDTH-1:0] bank_rd_data_a_b [0:BANKS-1];
+  wire [WIDTH-1:0] bank_rd_data_b_b [0:BANKS-1];
 
   reg bank_wr_en_1_a [0:BANKS-1];
   reg bank_wr_en_1_b [0:BANKS-1];
@@ -112,10 +112,10 @@ module ntt_coeff_banks #(
           .ADDR_WIDTH(BANK_DEPTH_WIDTH)
       ) u_bank_a (
           .clk(clk),
-          .rd_addr_a(bank_bf_rd_addr_a[b]),
-          .rd_data_a(bank_bf_rd_data_a[b]),
-          .rd_addr_b(ext_rd_index),
-          .rd_data_b(bank_ext_rd_data_a[b]),
+          .rd_addr_a(bank_rd_addr_a[b]),
+          .rd_data_a(bank_rd_data_a_a[b]),
+          .rd_addr_b(bank_rd_addr_b[b]),
+          .rd_data_b(bank_rd_data_b_a[b]),
           .wr_en_1(bank_wr_en_1_a[b]),
           .wr_addr_1(bank_wr_addr_1_a[b]),
           .wr_data_1(bank_wr_data_1_a[b]),
@@ -130,10 +130,10 @@ module ntt_coeff_banks #(
           .ADDR_WIDTH(BANK_DEPTH_WIDTH)
       ) u_bank_b (
           .clk(clk),
-          .rd_addr_a(bank_bf_rd_addr_b[b]),
-          .rd_data_a(bank_bf_rd_data_b[b]),
-          .rd_addr_b(ext_rd_index),
-          .rd_data_b(bank_ext_rd_data_b[b]),
+          .rd_addr_a(bank_rd_addr_a[b]),
+          .rd_data_a(bank_rd_data_a_b[b]),
+          .rd_addr_b(bank_rd_addr_b[b]),
+          .rd_data_b(bank_rd_data_b_b[b]),
           .wr_en_1(bank_wr_en_1_b[b]),
           .wr_addr_1(bank_wr_addr_1_b[b]),
           .wr_data_1(bank_wr_data_1_b[b]),
@@ -147,16 +147,22 @@ module ntt_coeff_banks #(
   genvar lane;
   generate
     for (lane = 0; lane < PARALLEL; lane = lane + 1) begin : gen_read_connections
-      localparam BANK_FOR_A = lane * 2;
-      localparam BANK_FOR_B = lane * 2 + 1;
+      localparam HALF_PARALLEL = PARALLEL / 2;
+      localparam BANK_FOR_A = (lane % HALF_PARALLEL) * 2;
+      localparam BANK_FOR_B = (lane % HALF_PARALLEL) * 2 + 1;
+      localparam USE_PORT_B = (lane >= HALF_PARALLEL);
 
-      assign bank_bf_rd_addr_a[BANK_FOR_A] = rd_index_a[lane*BANK_DEPTH_WIDTH +: BANK_DEPTH_WIDTH];
-      assign bank_bf_rd_addr_b[BANK_FOR_A] = rd_index_a[lane*BANK_DEPTH_WIDTH +: BANK_DEPTH_WIDTH];
-      assign bank_bf_rd_addr_a[BANK_FOR_B] = rd_index_b[lane*BANK_DEPTH_WIDTH +: BANK_DEPTH_WIDTH];
-      assign bank_bf_rd_addr_b[BANK_FOR_B] = rd_index_b[lane*BANK_DEPTH_WIDTH +: BANK_DEPTH_WIDTH];
-
-      assign coeff_a[lane*WIDTH +: WIDTH] = read_bank_sel ? bank_bf_rd_data_b[BANK_FOR_A] : bank_bf_rd_data_a[BANK_FOR_A];
-      assign coeff_b[lane*WIDTH +: WIDTH] = read_bank_sel ? bank_bf_rd_data_b[BANK_FOR_B] : bank_bf_rd_data_a[BANK_FOR_B];
+      if (USE_PORT_B) begin : gen_upper_lane
+        assign coeff_a[lane*WIDTH +: WIDTH] = read_bank_sel ? bank_rd_data_b_b[BANK_FOR_A]
+                                                            : bank_rd_data_b_a[BANK_FOR_A];
+        assign coeff_b[lane*WIDTH +: WIDTH] = read_bank_sel ? bank_rd_data_b_b[BANK_FOR_B]
+                                                            : bank_rd_data_b_a[BANK_FOR_B];
+      end else begin : gen_lower_lane
+        assign coeff_a[lane*WIDTH +: WIDTH] = read_bank_sel ? bank_rd_data_a_b[BANK_FOR_A]
+                                                            : bank_rd_data_a_a[BANK_FOR_A];
+        assign coeff_b[lane*WIDTH +: WIDTH] = read_bank_sel ? bank_rd_data_a_b[BANK_FOR_B]
+                                                            : bank_rd_data_a_a[BANK_FOR_B];
+      end
     end
   endgenerate
 
@@ -168,10 +174,35 @@ module ntt_coeff_banks #(
   end
 
   always @(*) begin
+    for (bi = 0; bi < BANKS; bi = bi + 1) begin
+      bank_rd_addr_a[bi] = ext_rd_index;
+      bank_rd_addr_b[bi] = 0;
+    end
+
+    if (write_enable) begin
+      for (li = 0; li < PARALLEL; li = li + 1) begin
+        if (li < (PARALLEL / 2)) begin
+          bank_rd_addr_a[li * 2]     = rd_index_a[li*BANK_DEPTH_WIDTH +: BANK_DEPTH_WIDTH];
+          bank_rd_addr_a[li * 2 + 1] = rd_index_b[li*BANK_DEPTH_WIDTH +: BANK_DEPTH_WIDTH];
+        end else begin
+          bank_rd_addr_b[(li - (PARALLEL / 2)) * 2] =
+              rd_index_a[li*BANK_DEPTH_WIDTH +: BANK_DEPTH_WIDTH];
+          bank_rd_addr_b[(li - (PARALLEL / 2)) * 2 + 1] =
+              rd_index_b[li*BANK_DEPTH_WIDTH +: BANK_DEPTH_WIDTH];
+        end
+      end
+    end
+
     if (OUTPUT_BANK == 0)
-      read_data = bank_ext_rd_data_a[ext_rd_bank_reg];
+      read_data = bank_rd_data_a_a[ext_rd_bank_reg];
     else
-      read_data = bank_ext_rd_data_b[ext_rd_bank_reg];
+      read_data = bank_rd_data_a_b[ext_rd_bank_reg];
+  end
+
+  initial begin
+    if ((PARALLEL % 2) != 0) begin
+      $error("ntt_coeff_banks requires even PARALLEL when BANKS == PARALLEL");
+    end
   end
 
   integer bi;

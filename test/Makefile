@@ -19,9 +19,9 @@ TOPLEVEL_LANG = verilog
 WAVES ?= 0
 export WAVES
 
-export PYTHONPATH := $(PWD):$(PYTHONPATH)
-TWIDDLE_FORWARD_SRC ?= $(PWD)/../rtl/twiddle_forward_4096.hex
-TWIDDLE_INVERSE_SRC ?= $(PWD)/../rtl/twiddle_inverse_4096.hex
+export PYTHONPATH := $(CURDIR):$(PYTHONPATH)
+TWIDDLE_FORWARD_SRC ?= $(CURDIR)/../rtl/twiddle_forward_4096.hex
+TWIDDLE_INVERSE_SRC ?= $(CURDIR)/../rtl/twiddle_inverse_4096.hex
 NTT_PARAM_ARGS ?=
 
 ifeq ($(SIM),verilator)
@@ -39,14 +39,17 @@ include $(shell cocotb-config --makefiles)/Makefile.sim
 # Copy twiddle hex files from rtl directory (needed for BRAM simulation)
 .PHONY: copy-hex-files
 copy-hex-files:
-	@cp -f $(TWIDDLE_FORWARD_SRC) $(PWD)/$(notdir $(TWIDDLE_FORWARD_SRC)) 2>/dev/null || true
-	@cp -f $(TWIDDLE_INVERSE_SRC) $(PWD)/$(notdir $(TWIDDLE_INVERSE_SRC)) 2>/dev/null || true
-	@cp -f $(TWIDDLE_FORWARD_SRC) $(PWD)/twiddle_forward.hex 2>/dev/null || true
-	@cp -f $(TWIDDLE_INVERSE_SRC) $(PWD)/twiddle_inverse.hex 2>/dev/null || true
-	@cp -f $(TWIDDLE_FORWARD_SRC) $(PWD)/twiddle_forward_1024.hex 2>/dev/null || true
-	@cp -f $(TWIDDLE_INVERSE_SRC) $(PWD)/twiddle_inverse_1024.hex 2>/dev/null || true
-	@cp -f $(TWIDDLE_FORWARD_SRC) $(PWD)/twiddle_forward_4096.hex 2>/dev/null || true
-	@cp -f $(TWIDDLE_INVERSE_SRC) $(PWD)/twiddle_inverse_4096.hex 2>/dev/null || true
+	@rm -f $(CURDIR)/twiddle_forward.hex $(CURDIR)/twiddle_inverse.hex \
+		$(CURDIR)/twiddle_forward_1024.hex $(CURDIR)/twiddle_inverse_1024.hex \
+		$(CURDIR)/twiddle_forward_4096.hex $(CURDIR)/twiddle_inverse_4096.hex
+	@cp -f $(TWIDDLE_FORWARD_SRC) $(CURDIR)/$(notdir $(TWIDDLE_FORWARD_SRC)) 2>/dev/null || true
+	@cp -f $(TWIDDLE_INVERSE_SRC) $(CURDIR)/$(notdir $(TWIDDLE_INVERSE_SRC)) 2>/dev/null || true
+	@cp -f $(TWIDDLE_FORWARD_SRC) $(CURDIR)/twiddle_forward.hex 2>/dev/null || true
+	@cp -f $(TWIDDLE_INVERSE_SRC) $(CURDIR)/twiddle_inverse.hex 2>/dev/null || true
+	@cp -f $(TWIDDLE_FORWARD_SRC) $(CURDIR)/twiddle_forward_1024.hex 2>/dev/null || true
+	@cp -f $(TWIDDLE_INVERSE_SRC) $(CURDIR)/twiddle_inverse_1024.hex 2>/dev/null || true
+	@cp -f $(TWIDDLE_FORWARD_SRC) $(CURDIR)/twiddle_forward_4096.hex 2>/dev/null || true
+	@cp -f $(TWIDDLE_INVERSE_SRC) $(CURDIR)/twiddle_inverse_4096.hex 2>/dev/null || true
 
 # Test targets
 .PHONY: help test-mod-add test-mod-sub test-ntt-mult test-all clean
@@ -256,43 +259,43 @@ test-ntt-control-4096:
 
 test-ntt-forward-1024:
 	@$(MAKE) test-ntt-forward \
-		TWIDDLE_FORWARD_SRC=$(PWD)/../rtl/twiddle_forward_1024.hex \
-		TWIDDLE_INVERSE_SRC=$(PWD)/../rtl/twiddle_inverse_1024.hex \
+		TWIDDLE_FORWARD_SRC=$(CURDIR)/../rtl/twiddle_forward_1024.hex \
+		TWIDDLE_INVERSE_SRC=$(CURDIR)/../rtl/twiddle_inverse_1024.hex \
 		NTT_N=1024 NTT_Q=8380417 NTT_PSI=5548360 \
 		NTT_PARAM_ARGS="-Pntt_forward.N=1024 -Pntt_forward.ADDR_WIDTH=10 -Pntt_forward.PSI=5548360 -Ptwiddle_bram_multiport.DEPTH=1024 -Ptwiddle_bram_multiport.ADDR_WIDTH=10 -Ptwiddle_bram.DEPTH=1024 -Ptwiddle_bram.ADDR_WIDTH=10 -Pntt_coeff_banks.N=1024 -Pntt_cg_address_gen.N=1024 -Pntt_control_parallel.N=1024 -Pntt_bank_switch.LOGN=10"
 
 test-ntt-inverse-1024:
 	@$(MAKE) test-ntt-inverse \
-		TWIDDLE_FORWARD_SRC=$(PWD)/../rtl/twiddle_forward_1024.hex \
-		TWIDDLE_INVERSE_SRC=$(PWD)/../rtl/twiddle_inverse_1024.hex \
+		TWIDDLE_FORWARD_SRC=$(CURDIR)/../rtl/twiddle_forward_1024.hex \
+		TWIDDLE_INVERSE_SRC=$(CURDIR)/../rtl/twiddle_inverse_1024.hex \
 		NTT_N=1024 NTT_Q=8380417 NTT_PSI=5548360 \
 		NTT_PARAM_ARGS="-Pntt_inverse.N=1024 -Pntt_inverse.ADDR_WIDTH=10 -Pntt_inverse.PSI_INV=2320879 -Pntt_inverse.N_INV=8372233 -Ptwiddle_bram_multiport.DEPTH=1024 -Ptwiddle_bram_multiport.ADDR_WIDTH=10 -Ptwiddle_bram.DEPTH=1024 -Ptwiddle_bram.ADDR_WIDTH=10 -Pntt_control_parallel.N=1024"
 
 test-ntt-poly-1024:
 	@$(MAKE) test-ntt-poly \
-		TWIDDLE_FORWARD_SRC=$(PWD)/../rtl/twiddle_forward_1024.hex \
-		TWIDDLE_INVERSE_SRC=$(PWD)/../rtl/twiddle_inverse_1024.hex \
+		TWIDDLE_FORWARD_SRC=$(CURDIR)/../rtl/twiddle_forward_1024.hex \
+		TWIDDLE_INVERSE_SRC=$(CURDIR)/../rtl/twiddle_inverse_1024.hex \
 		NTT_N=1024 NTT_Q=8380417 NTT_PSI=5548360 \
 		NTT_PARAM_ARGS="-Pntt_poly_mult.N=1024 -Pntt_poly_mult.ADDR_WIDTH=10 -Pntt_poly_mult.PSI=5548360 -Pntt_poly_mult.PSI_INV=2320879 -Pntt_poly_mult.N_INV=8372233"
 
 test-ntt-forward-4096:
 	@$(MAKE) test-ntt-forward \
-		TWIDDLE_FORWARD_SRC=$(PWD)/../rtl/twiddle_forward_4096.hex \
-		TWIDDLE_INVERSE_SRC=$(PWD)/../rtl/twiddle_inverse_4096.hex \
+		TWIDDLE_FORWARD_SRC=$(CURDIR)/../rtl/twiddle_forward_4096.hex \
+		TWIDDLE_INVERSE_SRC=$(CURDIR)/../rtl/twiddle_inverse_4096.hex \
 		NTT_N=4096 NTT_Q=8380417 NTT_PSI=283817 \
 		NTT_PARAM_ARGS="-Pntt_forward.N=4096 -Pntt_forward.ADDR_WIDTH=12 -Pntt_forward.PSI=283817 -Ptwiddle_bram_multiport.DEPTH=4096 -Ptwiddle_bram_multiport.ADDR_WIDTH=12 -Ptwiddle_bram.DEPTH=4096 -Ptwiddle_bram.ADDR_WIDTH=12 -Pntt_coeff_banks.N=4096 -Pntt_cg_address_gen.N=4096 -Pntt_control_parallel.N=4096 -Pntt_bank_switch.LOGN=12"
 
 test-ntt-inverse-4096:
 	@$(MAKE) test-ntt-inverse \
-		TWIDDLE_FORWARD_SRC=$(PWD)/../rtl/twiddle_forward_4096.hex \
-		TWIDDLE_INVERSE_SRC=$(PWD)/../rtl/twiddle_inverse_4096.hex \
+		TWIDDLE_FORWARD_SRC=$(CURDIR)/../rtl/twiddle_forward_4096.hex \
+		TWIDDLE_INVERSE_SRC=$(CURDIR)/../rtl/twiddle_inverse_4096.hex \
 		NTT_N=4096 NTT_Q=8380417 NTT_PSI=283817 \
 		NTT_PARAM_ARGS="-Pntt_inverse.N=4096 -Pntt_inverse.ADDR_WIDTH=12 -Pntt_inverse.PSI_INV=7893065 -Pntt_inverse.N_INV=8378371 -Ptwiddle_bram_multiport.DEPTH=4096 -Ptwiddle_bram_multiport.ADDR_WIDTH=12 -Ptwiddle_bram.DEPTH=4096 -Ptwiddle_bram.ADDR_WIDTH=12 -Pntt_coeff_banks.N=4096 -Pntt_cg_address_gen.N=4096 -Pntt_control_parallel.N=4096 -Pntt_bank_switch.LOGN=12"
 
 test-ntt-poly-4096:
 	@$(MAKE) test-ntt-poly \
-		TWIDDLE_FORWARD_SRC=$(PWD)/../rtl/twiddle_forward_4096.hex \
-		TWIDDLE_INVERSE_SRC=$(PWD)/../rtl/twiddle_inverse_4096.hex \
+		TWIDDLE_FORWARD_SRC=$(CURDIR)/../rtl/twiddle_forward_4096.hex \
+		TWIDDLE_INVERSE_SRC=$(CURDIR)/../rtl/twiddle_inverse_4096.hex \
 		NTT_N=4096 NTT_Q=8380417 NTT_PSI=283817 \
 		NTT_PARAM_ARGS="-Pntt_poly_mult.N=4096 -Pntt_poly_mult.ADDR_WIDTH=12 -Pntt_poly_mult.PSI=283817 -Pntt_poly_mult.PSI_INV=7893065 -Pntt_poly_mult.N_INV=8378371 -Ptwiddle_bram_multiport.DEPTH=4096 -Ptwiddle_bram_multiport.ADDR_WIDTH=12 -Ptwiddle_bram.DEPTH=4096 -Ptwiddle_bram.ADDR_WIDTH=12 -Pntt_coeff_banks.N=4096 -Pntt_cg_address_gen.N=4096 -Pntt_control_parallel.N=4096 -Pntt_bank_switch.LOGN=12"
 

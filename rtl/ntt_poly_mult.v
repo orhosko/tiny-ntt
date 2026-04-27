@@ -18,7 +18,7 @@ module ntt_poly_mult #(
     parameter int Q                = 8380417,
     parameter int ADDR_WIDTH       = $clog2(N),
     parameter int REDUCTION_TYPE   = 1,
-    parameter int PARALLEL         = 8,
+    parameter int PARALLEL         = 16,
     parameter int PSI              = 283817,
     parameter int PSI_INV          = 7893065,
     parameter int N_INV            = 8378371,
@@ -106,6 +106,8 @@ module ntt_poly_mult #(
   logic [READ_COUNT_WIDTH-1:0] read_index;
   logic read_pending;
   logic [READ_COUNT_WIDTH-1:0] point_index;
+  logic [READ_COUNT_WIDTH-1:0] bram_data_index;
+  logic bram_data_valid;
   logic [READ_COUNT_WIDTH-1:0] mul_index_pipe[0:MULT_PIPELINE];
   logic [MULT_PIPELINE:0] mul_valid_pipe;
 
@@ -114,6 +116,16 @@ module ntt_poly_mult #(
   logic [WIDTH-1:0] mul_a;
   logic [WIDTH-1:0] mul_b;
   logic [WIDTH-1:0] mul_result;
+  logic [WIDTH-1:0] a_ntt_dout_b;
+  logic [WIDTH-1:0] b_ntt_dout_b;
+  logic [ADDR_WIDTH-1:0] a_ntt_addr_b;
+  logic [ADDR_WIDTH-1:0] b_ntt_addr_b;
+  logic a_ntt_we_a;
+  logic b_ntt_we_a;
+  logic [ADDR_WIDTH-1:0] a_ntt_wr_addr;
+  logic [ADDR_WIDTH-1:0] b_ntt_wr_addr;
+  logic [WIDTH-1:0] a_ntt_wr_data;
+  logic [WIDTH-1:0] b_ntt_wr_data;
   logic [WIDTH-1:0] c_ntt_dout_b;
   logic [ADDR_WIDTH-1:0] c_ntt_addr_b;
   logic c_ntt_we_a;
@@ -212,6 +224,40 @@ module ntt_poly_mult #(
           .WIDTH(WIDTH),
           .DEPTH(N),
           .ADDR_WIDTH(ADDR_WIDTH)
+      ) u_a_ntt_mem (
+          .clk(clk),
+          .rst_n(rst_n),
+          .addr_a(a_ntt_wr_addr),
+          .din_a(a_ntt_wr_data),
+          .dout_a(),
+          .we_a(a_ntt_we_a),
+          .addr_b(a_ntt_addr_b),
+          .din_b('0),
+          .dout_b(a_ntt_dout_b),
+          .we_b(1'b0)
+      );
+
+      coeff_ram #(
+          .WIDTH(WIDTH),
+          .DEPTH(N),
+          .ADDR_WIDTH(ADDR_WIDTH)
+      ) u_b_ntt_mem (
+          .clk(clk),
+          .rst_n(rst_n),
+          .addr_a(b_ntt_wr_addr),
+          .din_a(b_ntt_wr_data),
+          .dout_a(),
+          .we_a(b_ntt_we_a),
+          .addr_b(b_ntt_addr_b),
+          .din_b('0),
+          .dout_b(b_ntt_dout_b),
+          .we_b(1'b0)
+      );
+
+      coeff_ram #(
+          .WIDTH(WIDTH),
+          .DEPTH(N),
+          .ADDR_WIDTH(ADDR_WIDTH)
       ) u_c_ntt_mem (
           .clk(clk),
           .rst_n(rst_n),
@@ -249,6 +295,8 @@ module ntt_poly_mult #(
       read_index <= '0;
       read_pending <= 1'b0;
       point_index <= '0;
+      bram_data_index <= '0;
+      bram_data_valid <= 1'b0;
       fwd_started <= 1'b0;
       inv_started <= 1'b0;
     end else begin
@@ -264,6 +312,8 @@ module ntt_poly_mult #(
         end
         if (next_state == POINTWISE) begin
           point_index <= '0;
+          bram_data_index <= '0;
+          bram_data_valid <= 1'b0;
         end
         if (next_state != RUN_A) begin
           fwd_started <= 1'b0;
@@ -307,6 +357,10 @@ module ntt_poly_mult #(
           end
         end
         POINTWISE: begin
+          if (!POINTWISE_PARALLEL) begin
+            bram_data_index <= point_index;
+            bram_data_valid <= (point_index < N);
+          end
           if (POINTWISE_PARALLEL) begin
             if (point_index < MULT_PIPELINE[READ_COUNT_WIDTH-1:0]) begin
               point_index <= point_index + 1'b1;
@@ -319,6 +373,9 @@ module ntt_poly_mult #(
             end
           end
         end
+        default: begin
+          bram_data_valid <= 1'b0;
+        end
         RUN_A: begin
           if (fwd_start) begin
             fwd_started <= 1'b1;
@@ -328,8 +385,6 @@ module ntt_poly_mult #(
           if (inv_start) begin
             inv_started <= 1'b1;
           end
-        end
-        default: begin
         end
       endcase
     end
@@ -342,8 +397,8 @@ module ntt_poly_mult #(
         mul_valid_pipe[stage_idx] <= 1'b0;
       end
     end else if (state == POINTWISE && !POINTWISE_PARALLEL) begin
-      mul_index_pipe[0] <= point_index;
-      mul_valid_pipe[0] <= (point_index < N);
+      mul_index_pipe[0] <= bram_data_index;
+      mul_valid_pipe[0] <= bram_data_valid;
       for (int stage_idx = 1; stage_idx <= MULT_PIPELINE; stage_idx++) begin
         mul_index_pipe[stage_idx] <= mul_index_pipe[stage_idx - 1];
         mul_valid_pipe[stage_idx] <= mul_valid_pipe[stage_idx - 1];
@@ -357,47 +412,38 @@ module ntt_poly_mult #(
   end
 
   generate
-    for (genvar i = 0; i < N; i++) begin : gen_ntt_storage
-      always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-          a_ntt[i] <= '0;
-          b_ntt[i] <= '0;
-          c_ntt[i] <= '0;
-        end else if (clear_ntt) begin
-          a_ntt[i] <= '0;
-          b_ntt[i] <= '0;
-          c_ntt[i] <= '0;
-        end else begin
-          case (state)
-            READ_A: begin
-              if (read_pending && (read_index - 1'b1) == READ_COUNT_WIDTH'(i)) begin
-                a_ntt[i] <= fwd_read_data;
+    if (POINTWISE_PARALLEL) begin : gen_ntt_storage_parallel
+      for (genvar i = 0; i < N; i++) begin : gen_ntt_storage
+        always_ff @(posedge clk or negedge rst_n) begin
+          if (!rst_n) begin
+            a_ntt[i] <= '0;
+            b_ntt[i] <= '0;
+            c_ntt[i] <= '0;
+          end else if (clear_ntt) begin
+            a_ntt[i] <= '0;
+            b_ntt[i] <= '0;
+            c_ntt[i] <= '0;
+          end else begin
+            case (state)
+              READ_A: begin
+                if (read_pending && (read_index - 1'b1) == READ_COUNT_WIDTH'(i)) begin
+                  a_ntt[i] <= fwd_read_data;
+                end
               end
-            end
-            READ_B: begin
-              if (read_pending && (read_index - 1'b1) == READ_COUNT_WIDTH'(i)) begin
-                b_ntt[i] <= fwd_read_data;
+              READ_B: begin
+                if (read_pending && (read_index - 1'b1) == READ_COUNT_WIDTH'(i)) begin
+                  b_ntt[i] <= fwd_read_data;
+                end
               end
-            end
-            POINTWISE: begin
-              if (POINTWISE_PARALLEL) begin
+              POINTWISE: begin
                 if (point_index == MULT_PIPELINE[READ_COUNT_WIDTH-1:0]) begin
                   c_ntt[i] <= c_ntt_parallel[i];
                 end
-              end else if (1'b0) begin
-                if (MULT_PIPELINE == 0) begin
-                  if (point_index < N && point_index == READ_COUNT_WIDTH'(i)) begin
-                    c_ntt[i] <= mul_result;
-                  end
-                end else if (mul_valid_pipe[MULT_PIPELINE]
-                             && mul_index_pipe[MULT_PIPELINE] == READ_COUNT_WIDTH'(i)) begin
-                  c_ntt[i] <= mul_result;
-                end
               end
-            end
-            default: begin
-            end
-          endcase
+              default: begin
+              end
+            endcase
+          end
         end
       end
     end
@@ -471,14 +517,28 @@ module ntt_poly_mult #(
                          (read_index < N ? read_index[ADDR_WIDTH-1:0] : ADDR_WIDTH'(N - 1)) :
                          '0;
 
-  assign mul_a = (point_index < N) ? a_ntt[point_index] : '0;
-  assign mul_b = (point_index < N) ? b_ntt[point_index] : '0;
+  assign a_ntt_we_a = !POINTWISE_PARALLEL && (state == READ_A) && read_pending;
+  assign a_ntt_wr_addr = read_index[ADDR_WIDTH-1:0] - ADDR_WIDTH'(1);
+  assign a_ntt_wr_data = fwd_read_data;
+  assign a_ntt_addr_b = (!POINTWISE_PARALLEL && state == POINTWISE && point_index < N)
+                        ? point_index[ADDR_WIDTH-1:0] : '0;
+
+  assign b_ntt_we_a = !POINTWISE_PARALLEL && (state == READ_B) && read_pending;
+  assign b_ntt_wr_addr = read_index[ADDR_WIDTH-1:0] - ADDR_WIDTH'(1);
+  assign b_ntt_wr_data = fwd_read_data;
+  assign b_ntt_addr_b = (!POINTWISE_PARALLEL && state == POINTWISE && point_index < N)
+                        ? point_index[ADDR_WIDTH-1:0] : '0;
+
+  assign mul_a = POINTWISE_PARALLEL ? ((point_index < N) ? a_ntt[point_index] : '0)
+                                    : a_ntt_dout_b;
+  assign mul_b = POINTWISE_PARALLEL ? ((point_index < N) ? b_ntt[point_index] : '0)
+                                    : b_ntt_dout_b;
 
   assign inv_start = (state == RUN_INV) && !inv_started;
   assign c_ntt_we_a = !POINTWISE_PARALLEL &&
-                      ((MULT_PIPELINE == 0) ? (state == POINTWISE && point_index < N)
+                      ((MULT_PIPELINE == 0) ? bram_data_valid
                                             : mul_valid_pipe[MULT_PIPELINE]);
-  assign c_ntt_wr_addr = (MULT_PIPELINE == 0) ? point_index[ADDR_WIDTH-1:0]
+  assign c_ntt_wr_addr = (MULT_PIPELINE == 0) ? bram_data_index[ADDR_WIDTH-1:0]
                                               : mul_index_pipe[MULT_PIPELINE][ADDR_WIDTH-1:0];
   assign c_ntt_wr_data = mul_result;
   assign c_ntt_addr_b = (!POINTWISE_PARALLEL && state == LOAD_INV && load_index < N)

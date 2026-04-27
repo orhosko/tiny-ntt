@@ -4,7 +4,7 @@ module ntt_butterfly_inverse #(
     parameter WIDTH          = 32,
     parameter Q              = 8380417,
     parameter REDUCTION_TYPE = 0,
-    parameter MULT_PIPELINE  = 3
+    parameter MULT_PIPELINE  = 4
 ) (
     input  wire              clk,
     input  wire              rst_n,

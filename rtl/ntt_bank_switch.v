@@ -6,7 +6,7 @@
 module ntt_bank_switch #(
     parameter LOGN            = 12,
     parameter PARALLEL        = 8,
-    parameter MULT_PIPELINE   = 3,
+    parameter MULT_PIPELINE   = 4,
     parameter TOTAL_PIPE_DEPTH = MULT_PIPELINE
 ) (
     input  wire                      clk,

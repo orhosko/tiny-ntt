@@ -7,7 +7,7 @@ module ntt_twiddle_table #(
     parameter ADDR_WIDTH     = 12,
     parameter TWIDDLE_DEPTH  = 4096,
     parameter REDUCTION_TYPE = 0,
-    parameter MULT_PIPELINE  = 3
+    parameter MULT_PIPELINE  = 4
 ) (
     input  wire                           clk,
     input  wire                           rst_n,

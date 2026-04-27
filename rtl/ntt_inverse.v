@@ -23,7 +23,7 @@ module ntt_inverse #(
     parameter int REDUCTION_TYPE = 0,
     parameter int N_INV          = 8378371,
     parameter int PARALLEL       = 8,
-    parameter int MULT_PIPELINE  = 3,
+    parameter int MULT_PIPELINE  = 4,
     parameter     TWIDDLE_FILE   = "twiddle_inverse_4096.hex"
 ) (
     input  logic                  clk,

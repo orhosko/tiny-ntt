@@ -8,7 +8,7 @@ module ntt_forward #(
     parameter ADDR_WIDTH     = $clog2(N),
     parameter REDUCTION_TYPE = 0,
     parameter PARALLEL       = 8,
-    parameter MULT_PIPELINE  = 3,
+    parameter MULT_PIPELINE  = 4,
     parameter TWIDDLE_FILE   = "twiddle_forward_4096.hex"
 ) (
     input  wire                  clk,

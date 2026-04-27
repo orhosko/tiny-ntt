@@ -11,7 +11,7 @@ import random
 Q = 8380417
 PSI = 1239911
 PSI_INV = pow(PSI, Q - 2, Q)
-MULT_PIPELINE = 3
+MULT_PIPELINE = 4
 CLOCK_PERIOD_NS = 1
 
 

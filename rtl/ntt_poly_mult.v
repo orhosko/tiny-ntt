@@ -25,7 +25,7 @@ module ntt_poly_mult #(
     parameter     FWD_TWIDDLE_FILE = "twiddle_forward_4096.hex",
     parameter     INV_TWIDDLE_FILE = "twiddle_inverse_4096.hex",
     parameter bit POINTWISE_PARALLEL = 1'b0,
-    parameter int MULT_PIPELINE    = 3
+    parameter int MULT_PIPELINE    = 4
 ) (
     input  logic clk,
     input  logic rst_n,

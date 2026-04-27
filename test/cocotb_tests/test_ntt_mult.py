@@ -15,7 +15,7 @@ import os
 N = 256  # Polynomial degree
 WIDTH = 32  # Coefficient width
 Q = 8380417
-MULT_PIPELINE = 3
+MULT_PIPELINE = 4
 CLOCK_PERIOD_NS = 1
 
 

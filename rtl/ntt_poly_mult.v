@@ -288,7 +288,7 @@ module ntt_poly_mult #(
 
   assign clear_ntt = (state == IDLE && next_state == LOAD_A);
 
-  always_ff @(posedge clk or negedge rst_n) begin
+  always_ff @(posedge clk) begin
     if (!rst_n) begin
       state <= IDLE;
       load_index <= '0;
@@ -390,7 +390,7 @@ module ntt_poly_mult #(
     end
   end
 
-  always_ff @(posedge clk or negedge rst_n) begin
+  always_ff @(posedge clk) begin
     if (!rst_n) begin
       for (int stage_idx = 0; stage_idx <= MULT_PIPELINE; stage_idx++) begin
         mul_index_pipe[stage_idx] <= '0;

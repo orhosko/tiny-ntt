@@ -76,32 +76,32 @@ module ntt_inverse #(
   localparam int BANK_ADDR_WIDTH = $clog2(BANKS);
   localparam int BANK_DEPTH_WIDTH = $clog2(BANK_DEPTH);
 
-  logic [WIDTH-1:0] mem_bank[0:BANKS-1][0:BANK_DEPTH-1];
+  reg [WIDTH-1:0] mem_bank[0:BANKS-1][0:BANK_DEPTH-1];
 
   // Address generation
   logic [ADDR_WIDTH-1:0] half_block;
   logic [ADDR_WIDTH-1:0] block_size;
-  logic [ADDR_WIDTH-1:0] twiddle_input;
-  logic [PARALLEL-1:0][ADDR_WIDTH-1:0] addr0;
-  logic [PARALLEL-1:0][ADDR_WIDTH-1:0] addr1;
-  logic [PARALLEL-1:0][ADDR_WIDTH-1:0] twiddle_addr;
-  logic [PARALLEL-1:0][BANK_ADDR_WIDTH-1:0] addr0_bank;
-  logic [PARALLEL-1:0][BANK_ADDR_WIDTH-1:0] addr1_bank;
-  logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr0_index;
-  logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr1_index;
+  reg [ADDR_WIDTH-1:0] addr0 [0:PARALLEL-1];
+  reg [ADDR_WIDTH-1:0] addr1 [0:PARALLEL-1];
+  reg [ADDR_WIDTH-1:0] twiddle_addr [0:PARALLEL-1];
+  reg [BANK_ADDR_WIDTH-1:0] addr0_bank [0:PARALLEL-1];
+  reg [BANK_ADDR_WIDTH-1:0] addr1_bank [0:PARALLEL-1];
+  reg [BANK_DEPTH_WIDTH-1:0] addr0_index [0:PARALLEL-1];
+  reg [BANK_DEPTH_WIDTH-1:0] addr1_index [0:PARALLEL-1];
 
-  logic [PARALLEL-1:0][BANK_ADDR_WIDTH-1:0] addr0_bank_pipe[0:MULT_PIPELINE];
-  logic [PARALLEL-1:0][BANK_ADDR_WIDTH-1:0] addr1_bank_pipe[0:MULT_PIPELINE];
-  logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr0_index_pipe[0:MULT_PIPELINE];
-  logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr1_index_pipe[0:MULT_PIPELINE];
-  logic [PARALLEL-1:0] lane_valid_pipe[0:MULT_PIPELINE];
+  reg [BANK_ADDR_WIDTH-1:0] addr0_bank_pipe [0:MULT_PIPELINE][0:PARALLEL-1];
+  reg [BANK_ADDR_WIDTH-1:0] addr1_bank_pipe [0:MULT_PIPELINE][0:PARALLEL-1];
+  reg [BANK_DEPTH_WIDTH-1:0] addr0_index_pipe [0:MULT_PIPELINE][0:PARALLEL-1];
+  reg [BANK_DEPTH_WIDTH-1:0] addr1_index_pipe [0:MULT_PIPELINE][0:PARALLEL-1];
+  reg lane_valid_pipe [0:MULT_PIPELINE][0:PARALLEL-1];
 
   // Twiddle and butterfly signals
-  logic [PARALLEL-1:0][WIDTH-1:0] a_in;
-  logic [PARALLEL-1:0][WIDTH-1:0] b_in;
-  logic [PARALLEL-1:0][WIDTH-1:0] twiddle;
-  logic [PARALLEL-1:0][WIDTH-1:0] a_out;
-  logic [PARALLEL-1:0][WIDTH-1:0] b_out;
+  reg [WIDTH-1:0] a_in [0:PARALLEL-1];
+  reg [WIDTH-1:0] b_in [0:PARALLEL-1];
+  reg [WIDTH-1:0] twiddle [0:PARALLEL-1];
+  reg [WIDTH-1:0] a_out [0:PARALLEL-1];
+  reg [WIDTH-1:0] b_out [0:PARALLEL-1];
+  reg pipe_active;
 
   localparam int TWIDDLE_DEPTH = N;
   localparam int MULT_LATENCY = (MULT_PIPELINE == 0) ? 1 : (MULT_PIPELINE + 1);
@@ -151,7 +151,7 @@ module ntt_inverse #(
       end
 
       INTT_COMPUTE: begin
-        if (intt_done_latched && !lane_valid_pipe[MULT_PIPELINE]) begin
+        if (intt_done_latched && !pipe_active) begin
           next_state = SCALE;
         end
       end
@@ -184,7 +184,7 @@ module ntt_inverse #(
     end else begin
       if (intt_done) begin
         intt_done_latched <= 1'b1;
-      end else if (intt_done_latched && !lane_valid_pipe[MULT_PIPELINE]) begin
+      end else if (intt_done_latched && !pipe_active) begin
         intt_done_latched <= 1'b0;
       end
     end
@@ -224,20 +224,20 @@ module ntt_inverse #(
   //============================================================================
 
 
-  function automatic [BANK_ADDR_WIDTH-1:0] bank_sel(input logic [ADDR_WIDTH-1:0] addr);
-    return addr % BANKS;
+  function [BANK_ADDR_WIDTH-1:0] bank_sel(input logic [ADDR_WIDTH-1:0] addr);
+    bank_sel = addr % BANKS;
   endfunction
 
-  function automatic [ADDR_WIDTH-1:0] bit_reverse(input logic [ADDR_WIDTH-1:0] value);
-    automatic logic [ADDR_WIDTH-1:0] reversed;
+  function [ADDR_WIDTH-1:0] bit_reverse(input logic [ADDR_WIDTH-1:0] value);
+    logic [ADDR_WIDTH-1:0] reversed;
     for (int i = 0; i < ADDR_WIDTH; i++) begin
       reversed[i] = value[ADDR_WIDTH - 1 - i];
     end
-    return reversed;
+    bit_reverse = reversed;
   endfunction
 
-  function automatic [BANK_DEPTH_WIDTH-1:0] bank_index(input logic [ADDR_WIDTH-1:0] addr);
-    return addr / BANKS;
+  function [BANK_DEPTH_WIDTH-1:0] bank_index(input logic [ADDR_WIDTH-1:0] addr);
+    bank_index = addr / BANKS;
   endfunction
 
   // Temporary variables for scaling address computation
@@ -261,9 +261,12 @@ module ntt_inverse #(
       int unsigned group;
       int unsigned position;
 
-      butterfly_idx = butterfly_base + lane;
+      butterfly_idx = 0;
+      group = 0;
+      position = 0;
 
       if (lane_valid[lane]) begin
+        butterfly_idx = butterfly_base + lane;
         group = butterfly_idx >> stage;
         position = butterfly_idx & (half_block - 1);
 
@@ -275,8 +278,7 @@ module ntt_inverse #(
         addr0_index[lane] = bank_index(addr0[lane]);
         addr1_index[lane] = bank_index(addr1[lane]);
 
-        twiddle_input = ADDR_WIDTH'(1 << (LOGN - stage - 1)) + group;
-        twiddle_addr[lane] = bit_reverse(twiddle_input);
+        twiddle_addr[lane] = bit_reverse(ADDR_WIDTH'(1 << (LOGN - stage - 1)) + group);
       end else begin
         addr0[lane] = '0;
         addr1[lane] = '0;
@@ -311,18 +313,29 @@ module ntt_inverse #(
         end
       end
     end else begin
-      addr0_bank_pipe[0] <= addr0_bank;
-      addr1_bank_pipe[0] <= addr1_bank;
-      addr0_index_pipe[0] <= addr0_index;
-      addr1_index_pipe[0] <= addr1_index;
-      lane_valid_pipe[0] <= lane_valid;
-      for (int stage_idx = 1; stage_idx <= MULT_PIPELINE; stage_idx++) begin
-        addr0_bank_pipe[stage_idx] <= addr0_bank_pipe[stage_idx - 1];
-        addr1_bank_pipe[stage_idx] <= addr1_bank_pipe[stage_idx - 1];
-        addr0_index_pipe[stage_idx] <= addr0_index_pipe[stage_idx - 1];
-        addr1_index_pipe[stage_idx] <= addr1_index_pipe[stage_idx - 1];
-        lane_valid_pipe[stage_idx] <= lane_valid_pipe[stage_idx - 1];
+      for (int lane_idx = 0; lane_idx < PARALLEL; lane_idx++) begin
+        addr0_bank_pipe[0][lane_idx] <= addr0_bank[lane_idx];
+        addr1_bank_pipe[0][lane_idx] <= addr1_bank[lane_idx];
+        addr0_index_pipe[0][lane_idx] <= addr0_index[lane_idx];
+        addr1_index_pipe[0][lane_idx] <= addr1_index[lane_idx];
+        lane_valid_pipe[0][lane_idx] <= lane_valid[lane_idx];
       end
+      for (int stage_idx = 1; stage_idx <= MULT_PIPELINE; stage_idx++) begin
+        for (int lane_idx = 0; lane_idx < PARALLEL; lane_idx++) begin
+          addr0_bank_pipe[stage_idx][lane_idx] <= addr0_bank_pipe[stage_idx - 1][lane_idx];
+          addr1_bank_pipe[stage_idx][lane_idx] <= addr1_bank_pipe[stage_idx - 1][lane_idx];
+          addr0_index_pipe[stage_idx][lane_idx] <= addr0_index_pipe[stage_idx - 1][lane_idx];
+          addr1_index_pipe[stage_idx][lane_idx] <= addr1_index_pipe[stage_idx - 1][lane_idx];
+          lane_valid_pipe[stage_idx][lane_idx] <= lane_valid_pipe[stage_idx - 1][lane_idx];
+        end
+      end
+    end
+  end
+
+  always @(*) begin
+    pipe_active = 1'b0;
+    for (int lane_idx = 0; lane_idx < PARALLEL; lane_idx++) begin
+      pipe_active = pipe_active | lane_valid_pipe[MULT_PIPELINE][lane_idx];
     end
   end
 

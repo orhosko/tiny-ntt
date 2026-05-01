@@ -18,7 +18,7 @@ module ntt_poly_mult #(
     parameter int Q                = 8380417,
     parameter int ADDR_WIDTH       = $clog2(N),
     parameter int REDUCTION_TYPE   = 1,
-    parameter int PARALLEL         = 16,
+    parameter int PARALLEL         = 8,
     parameter int PSI              = 283817,
     parameter int PSI_INV          = 7893065,
     parameter int N_INV            = 8378371,

@@ -179,6 +179,8 @@ module ntt_coeff_banks #(
   endgenerate
 
   integer reg_bi;
+  integer bi;
+  integer li;
   always @(posedge clk) begin
     if (!rst_n) begin
       ext_rd_bank_reg <= 0;
@@ -247,8 +249,6 @@ module ntt_coeff_banks #(
     end
   end
 
-  integer bi;
-  integer li;
   reg [BANK_ADDR_WIDTH-1:0] wr_bank_a_lane;
   reg [BANK_ADDR_WIDTH-1:0] wr_bank_b_lane;
   reg [BANK_DEPTH_WIDTH-1:0] wr_index_a_lane;

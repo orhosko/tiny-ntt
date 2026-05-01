@@ -186,7 +186,7 @@ test-ntt-poly: clean copy-hex-files
 		MODULE=cocotb_tests.test_ntt_poly_mult \
 		TOPLEVEL=ntt_poly_mult \
 		COMPILE_ARGS='$(COMPILE_ARGS) $(NTT_PARAM_ARGS)' \
-		VERILOG_SOURCES="$(PWD)/../rtl/ntt_poly_mult.v $(PWD)/../rtl/coeff_ram.v $(PWD)/../rtl/ntt_forward.v $(PWD)/../rtl/ntt_coeff_banks.v $(PWD)/../rtl/ntt_coeff_bank_single.v $(PWD)/../rtl/ntt_cg_address_gen.v $(PWD)/../rtl/twiddle_bram.v $(PWD)/../rtl/twiddle_bram_multiport.v $(PWD)/../rtl/ntt_bank_switch.v $(PWD)/../rtl/ntt_control_parallel.v $(PWD)/../rtl/ntt_inverse.v $(PWD)/../rtl/ntt_pointwise_mult.v $(PWD)/../rtl/twiddle_rom.v $(PWD)/../rtl/ntt_butterfly.v $(PWD)/../rtl/ntt_butterfly_inverse.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/mod_add.v $(PWD)/../rtl/mod_sub.v $(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/montgomery_reduction.v" \
+		VERILOG_SOURCES="$(PWD)/../rtl/ntt_poly_mult.sv $(PWD)/../rtl/coeff_ram.v $(PWD)/../rtl/ntt_forward.sv $(PWD)/../rtl/ntt_coeff_banks.v $(PWD)/../rtl/ntt_coeff_bank_single.v $(PWD)/../rtl/ntt_cg_address_gen.v $(PWD)/../rtl/twiddle_bram.v $(PWD)/../rtl/twiddle_bram_multiport.v $(PWD)/../rtl/ntt_bank_switch.v $(PWD)/../rtl/ntt_control_parallel.v $(PWD)/../rtl/ntt_inverse.sv $(PWD)/../rtl/ntt_pointwise_mult.v $(PWD)/../rtl/twiddle_rom.v $(PWD)/../rtl/ntt_butterfly.v $(PWD)/../rtl/ntt_butterfly_inverse.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/mod_add.v $(PWD)/../rtl/mod_sub.v $(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/montgomery_reduction.v" \
 		sim
 
 # Test NTT forward (full integration)
@@ -199,7 +199,7 @@ test-ntt-forward: clean copy-hex-files
 		MODULE=cocotb_tests.test_ntt_forward \
 		TOPLEVEL=ntt_forward \
 		COMPILE_ARGS='$(COMPILE_ARGS) $(NTT_PARAM_ARGS)' \
-		VERILOG_SOURCES="$(PWD)/../rtl/ntt_forward.v $(PWD)/../rtl/ntt_coeff_banks.v $(PWD)/../rtl/ntt_coeff_bank_single.v $(PWD)/../rtl/ntt_cg_address_gen.v $(PWD)/../rtl/twiddle_bram.v $(PWD)/../rtl/twiddle_bram_multiport.v $(PWD)/../rtl/ntt_bank_switch.v $(PWD)/../rtl/ntt_control_parallel.v $(PWD)/../rtl/twiddle_rom.v $(PWD)/../rtl/ntt_butterfly.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/mod_add.v $(PWD)/../rtl/mod_sub.v $(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/montgomery_reduction.v" \
+		VERILOG_SOURCES="$(PWD)/../rtl/ntt_forward.sv $(PWD)/../rtl/ntt_coeff_banks.v $(PWD)/../rtl/ntt_coeff_bank_single.v $(PWD)/../rtl/ntt_cg_address_gen.v $(PWD)/../rtl/twiddle_bram.v $(PWD)/../rtl/twiddle_bram_multiport.v $(PWD)/../rtl/ntt_bank_switch.v $(PWD)/../rtl/ntt_control_parallel.v $(PWD)/../rtl/twiddle_rom.v $(PWD)/../rtl/ntt_butterfly.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/mod_add.v $(PWD)/../rtl/mod_sub.v $(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/montgomery_reduction.v" \
 		sim
 
 # Run all tests
@@ -244,7 +244,7 @@ test-ntt-inverse: clean copy-hex-files
 		MODULE=cocotb_tests.test_ntt_inverse \
 		TOPLEVEL=ntt_inverse \
 		COMPILE_ARGS='$(COMPILE_ARGS) $(NTT_PARAM_ARGS)' \
-		VERILOG_SOURCES="$(PWD)/../rtl/ntt_inverse.v $(PWD)/../rtl/ntt_control_parallel.v $(PWD)/../rtl/ntt_coeff_banks.v $(PWD)/../rtl/ntt_coeff_bank_single.v $(PWD)/../rtl/ntt_cg_address_gen.v $(PWD)/../rtl/ntt_bank_switch.v $(PWD)/../rtl/twiddle_bram.v $(PWD)/../rtl/twiddle_bram_multiport.v $(PWD)/../rtl/ntt_butterfly.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/mod_add.v $(PWD)/../rtl/mod_sub.v $(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/montgomery_reduction.v" \
+		VERILOG_SOURCES="$(PWD)/../rtl/ntt_inverse.sv $(PWD)/../rtl/ntt_control_parallel.v $(PWD)/../rtl/ntt_coeff_banks.v $(PWD)/../rtl/ntt_coeff_bank_single.v $(PWD)/../rtl/ntt_cg_address_gen.v $(PWD)/../rtl/ntt_bank_switch.v $(PWD)/../rtl/twiddle_bram.v $(PWD)/../rtl/twiddle_bram_multiport.v $(PWD)/../rtl/ntt_butterfly.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/mod_add.v $(PWD)/../rtl/mod_sub.v $(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/montgomery_reduction.v" \
 		sim
 
 test-ntt-control-1024:

@@ -52,8 +52,10 @@ module ntt_inverse #(
   localparam int BANK_ADDR_WIDTH = $clog2(BANKS);
   localparam int BANK_DEPTH_WIDTH = $clog2(BANK_DEPTH);
   localparam int OUTPUT_BANK = (LOGN % 2 == 0) ? 0 : 1;
-  localparam int BRAM_LATENCY = 2;
-  localparam int TOTAL_PIPE_DEPTH = MULT_PIPELINE + BRAM_LATENCY;
+  localparam int TWIDDLE_ADDR_REG_LATENCY = 1;
+  localparam int BRAM_LATENCY = 2 + TWIDDLE_ADDR_REG_LATENCY;
+  localparam int WRITEBACK_LATENCY = 1;
+  localparam int TOTAL_PIPE_DEPTH = MULT_PIPELINE + BRAM_LATENCY + WRITEBACK_LATENCY;
   localparam int SCALE_PIPE_DEPTH = MULT_PIPELINE + 1;
 
   state_t state, next_state;
@@ -92,8 +94,13 @@ module ntt_inverse #(
   logic [PARALLEL*WIDTH-1:0] coeff_b_raw;
   logic [PARALLEL*WIDTH-1:0] coeff_a;
   logic [PARALLEL*WIDTH-1:0] coeff_b;
+  logic [PARALLEL*WIDTH-1:0] coeff_a_aligned;
+  logic [PARALLEL*WIDTH-1:0] coeff_b_aligned;
   logic [PARALLEL*WIDTH-1:0] a_out;
   logic [PARALLEL*WIDTH-1:0] b_out;
+  logic [PARALLEL*WIDTH-1:0] wb_a_out;
+  logic [PARALLEL*WIDTH-1:0] wb_b_out;
+  logic [PARALLEL*ADDR_WIDTH-1:0] twiddle_addr_reg;
   logic [PARALLEL*WIDTH-1:0] twiddle;
 
   logic read_bank_sel;
@@ -241,7 +248,7 @@ module ntt_inverse #(
       .OUTPUT_PIPE_STAGES(BRAM_LATENCY)
   ) u_twiddle_bram (
       .clk (clk),
-      .addr(twiddle_addr),
+      .addr(twiddle_addr_reg),
       .data(twiddle)
   );
 
@@ -298,8 +305,8 @@ module ntt_inverse #(
       .wr_index_a     (addr0_out_index_pipe[TOTAL_PIPE_DEPTH]),
       .wr_bank_b      (addr1_out_bank_pipe[TOTAL_PIPE_DEPTH]),
       .wr_index_b     (addr1_out_index_pipe[TOTAL_PIPE_DEPTH]),
-      .result_a       (a_out),
-      .result_b       (b_out)
+      .result_a       (wb_a_out),
+      .result_b       (wb_b_out)
   );
 
   integer pipe_stage_idx;
@@ -307,6 +314,11 @@ module ntt_inverse #(
     if (!rst_n) begin
       coeff_a <= '0;
       coeff_b <= '0;
+      coeff_a_aligned <= '0;
+      coeff_b_aligned <= '0;
+      wb_a_out <= '0;
+      wb_b_out <= '0;
+      twiddle_addr_reg <= '0;
       for (pipe_stage_idx = 0; pipe_stage_idx <= TOTAL_PIPE_DEPTH; pipe_stage_idx = pipe_stage_idx + 1) begin
         addr0_out_bank_pipe[pipe_stage_idx] <= '0;
         addr1_out_bank_pipe[pipe_stage_idx] <= '0;
@@ -317,6 +329,11 @@ module ntt_inverse #(
     end else begin
       coeff_a <= coeff_a_raw;
       coeff_b <= coeff_b_raw;
+      coeff_a_aligned <= coeff_a;
+      coeff_b_aligned <= coeff_b;
+      wb_a_out <= a_out;
+      wb_b_out <= b_out;
+      twiddle_addr_reg <= twiddle_addr;
       lane_valid_pipe[0] <= lane_valid;
       if (lane_valid_any) begin
         addr0_out_bank_pipe[0] <= addr0_out_bank;
@@ -346,8 +363,8 @@ module ntt_inverse #(
       ) u_inv_butterfly (
           .clk    (clk),
           .rst_n  (rst_n),
-          .a      (coeff_a[lane*WIDTH +: WIDTH]),
-          .b      (coeff_b[lane*WIDTH +: WIDTH]),
+          .a      (coeff_a_aligned[lane*WIDTH +: WIDTH]),
+          .b      (coeff_b_aligned[lane*WIDTH +: WIDTH]),
           .twiddle(twiddle[lane*WIDTH +: WIDTH]),
           .a_out  (a_out[lane*WIDTH +: WIDTH]),
           .b_out  (b_out[lane*WIDTH +: WIDTH])

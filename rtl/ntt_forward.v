@@ -30,8 +30,10 @@ module ntt_forward #(
   localparam BANK_ADDR_WIDTH = $clog2(BANKS);
   localparam BANK_DEPTH_WIDTH = $clog2(BANK_DEPTH);
   localparam OUTPUT_BANK = (LOGN % 2 == 0) ? 0 : 1;
-  localparam BRAM_LATENCY = 2;
-  localparam TOTAL_PIPE_DEPTH = MULT_PIPELINE + BRAM_LATENCY;
+  localparam TWIDDLE_ADDR_REG_LATENCY = 1;
+  localparam BRAM_LATENCY = 2 + TWIDDLE_ADDR_REG_LATENCY;
+  localparam WRITEBACK_LATENCY = 1;
+  localparam TOTAL_PIPE_DEPTH = MULT_PIPELINE + BRAM_LATENCY + WRITEBACK_LATENCY;
 
   wire [LOGN-1:0] stage;
   wire [$clog2(TOTAL_BUTTERFLIES)-1:0] butterfly_base;
@@ -66,8 +68,13 @@ module ntt_forward #(
   wire [PARALLEL*WIDTH-1:0] coeff_b_raw;
   reg [PARALLEL*WIDTH-1:0] coeff_a;
   reg [PARALLEL*WIDTH-1:0] coeff_b;
+  reg [PARALLEL*WIDTH-1:0] coeff_a_aligned;
+  reg [PARALLEL*WIDTH-1:0] coeff_b_aligned;
   wire [PARALLEL*WIDTH-1:0] a_out;
   wire [PARALLEL*WIDTH-1:0] b_out;
+  reg [PARALLEL*WIDTH-1:0] wb_a_out;
+  reg [PARALLEL*WIDTH-1:0] wb_b_out;
+  reg [PARALLEL*ADDR_WIDTH-1:0] twiddle_addr_reg;
   wire [PARALLEL*WIDTH-1:0] twiddle;
 
   wire read_bank_sel;
@@ -105,7 +112,7 @@ module ntt_forward #(
       .OUTPUT_PIPE_STAGES(BRAM_LATENCY)
   ) u_twiddle_bram (
       .clk(clk),
-      .addr(twiddle_addr),
+      .addr(twiddle_addr_reg),
       .data(twiddle)
   );
 
@@ -185,8 +192,8 @@ module ntt_forward #(
       .wr_index_a(addr0_out_index_pipe[TOTAL_PIPE_DEPTH]),
       .wr_bank_b(addr1_out_bank_pipe[TOTAL_PIPE_DEPTH]),
       .wr_index_b(addr1_out_index_pipe[TOTAL_PIPE_DEPTH]),
-      .result_a(a_out),
-      .result_b(b_out)
+      .result_a(wb_a_out),
+      .result_b(wb_b_out)
   );
 
   integer stage_idx;
@@ -194,6 +201,11 @@ module ntt_forward #(
     if (!rst_n) begin
       coeff_a <= 0;
       coeff_b <= 0;
+      coeff_a_aligned <= 0;
+      coeff_b_aligned <= 0;
+      wb_a_out <= 0;
+      wb_b_out <= 0;
+      twiddle_addr_reg <= 0;
       for (stage_idx = 0; stage_idx <= TOTAL_PIPE_DEPTH; stage_idx = stage_idx + 1) begin
         addr0_out_bank_pipe[stage_idx] <= 0;
         addr1_out_bank_pipe[stage_idx] <= 0;
@@ -204,6 +216,11 @@ module ntt_forward #(
     end else begin
       coeff_a <= coeff_a_raw;
       coeff_b <= coeff_b_raw;
+      coeff_a_aligned <= coeff_a;
+      coeff_b_aligned <= coeff_b;
+      wb_a_out <= a_out;
+      wb_b_out <= b_out;
+      twiddle_addr_reg <= twiddle_addr;
       lane_valid_pipe[0] <= lane_valid;
       if (|lane_valid) begin
         addr0_out_bank_pipe[0] <= addr0_out_bank;
@@ -233,8 +250,8 @@ module ntt_forward #(
       ) u_butterfly (
           .clk(clk),
           .rst_n(rst_n),
-          .a(coeff_a[lane*WIDTH +: WIDTH]),
-          .b(coeff_b[lane*WIDTH +: WIDTH]),
+          .a(coeff_a_aligned[lane*WIDTH +: WIDTH]),
+          .b(coeff_b_aligned[lane*WIDTH +: WIDTH]),
           .twiddle(twiddle[lane*WIDTH +: WIDTH]),
           .a_out(a_out[lane*WIDTH +: WIDTH]),
           .b_out(b_out[lane*WIDTH +: WIDTH])

@@ -75,16 +75,28 @@ module ntt_coeff_banks #(
 
   reg bank_wr_en_1_a [0:BANKS-1];
   reg bank_wr_en_1_b [0:BANKS-1];
+  reg bank_wr_en_1_a_next [0:BANKS-1];
+  reg bank_wr_en_1_b_next [0:BANKS-1];
   reg [BANK_DEPTH_WIDTH-1:0] bank_wr_addr_1_a [0:BANKS-1];
   reg [BANK_DEPTH_WIDTH-1:0] bank_wr_addr_1_b [0:BANKS-1];
+  reg [BANK_DEPTH_WIDTH-1:0] bank_wr_addr_1_a_next [0:BANKS-1];
+  reg [BANK_DEPTH_WIDTH-1:0] bank_wr_addr_1_b_next [0:BANKS-1];
   reg [WIDTH-1:0] bank_wr_data_1_a [0:BANKS-1];
   reg [WIDTH-1:0] bank_wr_data_1_b [0:BANKS-1];
+  reg [WIDTH-1:0] bank_wr_data_1_a_next [0:BANKS-1];
+  reg [WIDTH-1:0] bank_wr_data_1_b_next [0:BANKS-1];
   reg bank_wr_en_2_a [0:BANKS-1];
   reg bank_wr_en_2_b [0:BANKS-1];
+  reg bank_wr_en_2_a_next [0:BANKS-1];
+  reg bank_wr_en_2_b_next [0:BANKS-1];
   reg [BANK_DEPTH_WIDTH-1:0] bank_wr_addr_2_a [0:BANKS-1];
   reg [BANK_DEPTH_WIDTH-1:0] bank_wr_addr_2_b [0:BANKS-1];
+  reg [BANK_DEPTH_WIDTH-1:0] bank_wr_addr_2_a_next [0:BANKS-1];
+  reg [BANK_DEPTH_WIDTH-1:0] bank_wr_addr_2_b_next [0:BANKS-1];
   reg [WIDTH-1:0] bank_wr_data_2_a [0:BANKS-1];
   reg [WIDTH-1:0] bank_wr_data_2_b [0:BANKS-1];
+  reg [WIDTH-1:0] bank_wr_data_2_a_next [0:BANKS-1];
+  reg [WIDTH-1:0] bank_wr_data_2_b_next [0:BANKS-1];
 
   wire [BANK_ADDR_WIDTH-1:0] ext_rd_bank;
   wire [BANK_DEPTH_WIDTH-1:0] ext_rd_index;
@@ -166,11 +178,41 @@ module ntt_coeff_banks #(
     end
   endgenerate
 
+  integer reg_bi;
   always @(posedge clk) begin
-    if (!rst_n)
+    if (!rst_n) begin
       ext_rd_bank_reg <= 0;
-    else
+      for (reg_bi = 0; reg_bi < BANKS; reg_bi = reg_bi + 1) begin
+        bank_wr_en_1_a[reg_bi] <= 1'b0;
+        bank_wr_en_1_b[reg_bi] <= 1'b0;
+        bank_wr_addr_1_a[reg_bi] <= 0;
+        bank_wr_addr_1_b[reg_bi] <= 0;
+        bank_wr_data_1_a[reg_bi] <= 0;
+        bank_wr_data_1_b[reg_bi] <= 0;
+        bank_wr_en_2_a[reg_bi] <= 1'b0;
+        bank_wr_en_2_b[reg_bi] <= 1'b0;
+        bank_wr_addr_2_a[reg_bi] <= 0;
+        bank_wr_addr_2_b[reg_bi] <= 0;
+        bank_wr_data_2_a[reg_bi] <= 0;
+        bank_wr_data_2_b[reg_bi] <= 0;
+      end
+    end else begin
       ext_rd_bank_reg <= ext_rd_bank;
+      for (reg_bi = 0; reg_bi < BANKS; reg_bi = reg_bi + 1) begin
+        bank_wr_en_1_a[reg_bi] <= bank_wr_en_1_a_next[reg_bi];
+        bank_wr_en_1_b[reg_bi] <= bank_wr_en_1_b_next[reg_bi];
+        bank_wr_addr_1_a[reg_bi] <= bank_wr_addr_1_a_next[reg_bi];
+        bank_wr_addr_1_b[reg_bi] <= bank_wr_addr_1_b_next[reg_bi];
+        bank_wr_data_1_a[reg_bi] <= bank_wr_data_1_a_next[reg_bi];
+        bank_wr_data_1_b[reg_bi] <= bank_wr_data_1_b_next[reg_bi];
+        bank_wr_en_2_a[reg_bi] <= bank_wr_en_2_a_next[reg_bi];
+        bank_wr_en_2_b[reg_bi] <= bank_wr_en_2_b_next[reg_bi];
+        bank_wr_addr_2_a[reg_bi] <= bank_wr_addr_2_a_next[reg_bi];
+        bank_wr_addr_2_b[reg_bi] <= bank_wr_addr_2_b_next[reg_bi];
+        bank_wr_data_2_a[reg_bi] <= bank_wr_data_2_a_next[reg_bi];
+        bank_wr_data_2_b[reg_bi] <= bank_wr_data_2_b_next[reg_bi];
+      end
+    end
   end
 
   always @(*) begin
@@ -215,33 +257,33 @@ module ntt_coeff_banks #(
   reg [WIDTH-1:0] result_b_lane;
   always @(*) begin
     for (bi = 0; bi < BANKS; bi = bi + 1) begin
-      bank_wr_en_1_a[bi] = 1'b0;
-      bank_wr_en_1_b[bi] = 1'b0;
-      bank_wr_addr_1_a[bi] = 0;
-      bank_wr_addr_1_b[bi] = 0;
-      bank_wr_data_1_a[bi] = 0;
-      bank_wr_data_1_b[bi] = 0;
-      bank_wr_en_2_a[bi] = 1'b0;
-      bank_wr_en_2_b[bi] = 1'b0;
-      bank_wr_addr_2_a[bi] = 0;
-      bank_wr_addr_2_b[bi] = 0;
-      bank_wr_data_2_a[bi] = 0;
-      bank_wr_data_2_b[bi] = 0;
+      bank_wr_en_1_a_next[bi] = 1'b0;
+      bank_wr_en_1_b_next[bi] = 1'b0;
+      bank_wr_addr_1_a_next[bi] = 0;
+      bank_wr_addr_1_b_next[bi] = 0;
+      bank_wr_data_1_a_next[bi] = 0;
+      bank_wr_data_1_b_next[bi] = 0;
+      bank_wr_en_2_a_next[bi] = 1'b0;
+      bank_wr_en_2_b_next[bi] = 1'b0;
+      bank_wr_addr_2_a_next[bi] = 0;
+      bank_wr_addr_2_b_next[bi] = 0;
+      bank_wr_data_2_a_next[bi] = 0;
+      bank_wr_data_2_b_next[bi] = 0;
     end
 
     if (load_enable) begin
-      bank_wr_en_1_a[load_bank] = 1'b1;
-      bank_wr_addr_1_a[load_bank] = load_index;
-      bank_wr_data_1_a[load_bank] = load_data;
+      bank_wr_en_1_a_next[load_bank] = 1'b1;
+      bank_wr_addr_1_a_next[load_bank] = load_index;
+      bank_wr_data_1_a_next[load_bank] = load_data;
     end else if (ext_write_enable) begin
       if (OUTPUT_BANK == 0) begin
-        bank_wr_en_1_a[ext_wr_bank] = 1'b1;
-        bank_wr_addr_1_a[ext_wr_bank] = ext_wr_index;
-        bank_wr_data_1_a[ext_wr_bank] = ext_write_data;
+        bank_wr_en_1_a_next[ext_wr_bank] = 1'b1;
+        bank_wr_addr_1_a_next[ext_wr_bank] = ext_wr_index;
+        bank_wr_data_1_a_next[ext_wr_bank] = ext_write_data;
       end else begin
-        bank_wr_en_1_b[ext_wr_bank] = 1'b1;
-        bank_wr_addr_1_b[ext_wr_bank] = ext_wr_index;
-        bank_wr_data_1_b[ext_wr_bank] = ext_write_data;
+        bank_wr_en_1_b_next[ext_wr_bank] = 1'b1;
+        bank_wr_addr_1_b_next[ext_wr_bank] = ext_wr_index;
+        bank_wr_data_1_b_next[ext_wr_bank] = ext_write_data;
       end
     end else if (write_enable) begin
       for (li = 0; li < PARALLEL; li = li + 1) begin
@@ -254,19 +296,19 @@ module ntt_coeff_banks #(
           result_b_lane = result_b[li*WIDTH +: WIDTH];
 
           if (write_bank_sel) begin
-            bank_wr_en_1_b[wr_bank_a_lane] = 1'b1;
-            bank_wr_addr_1_b[wr_bank_a_lane] = wr_index_a_lane;
-            bank_wr_data_1_b[wr_bank_a_lane] = result_a_lane;
-            bank_wr_en_2_b[wr_bank_b_lane] = 1'b1;
-            bank_wr_addr_2_b[wr_bank_b_lane] = wr_index_b_lane;
-            bank_wr_data_2_b[wr_bank_b_lane] = result_b_lane;
+            bank_wr_en_1_b_next[wr_bank_a_lane] = 1'b1;
+            bank_wr_addr_1_b_next[wr_bank_a_lane] = wr_index_a_lane;
+            bank_wr_data_1_b_next[wr_bank_a_lane] = result_a_lane;
+            bank_wr_en_2_b_next[wr_bank_b_lane] = 1'b1;
+            bank_wr_addr_2_b_next[wr_bank_b_lane] = wr_index_b_lane;
+            bank_wr_data_2_b_next[wr_bank_b_lane] = result_b_lane;
           end else begin
-            bank_wr_en_1_a[wr_bank_a_lane] = 1'b1;
-            bank_wr_addr_1_a[wr_bank_a_lane] = wr_index_a_lane;
-            bank_wr_data_1_a[wr_bank_a_lane] = result_a_lane;
-            bank_wr_en_2_a[wr_bank_b_lane] = 1'b1;
-            bank_wr_addr_2_a[wr_bank_b_lane] = wr_index_b_lane;
-            bank_wr_data_2_a[wr_bank_b_lane] = result_b_lane;
+            bank_wr_en_1_a_next[wr_bank_a_lane] = 1'b1;
+            bank_wr_addr_1_a_next[wr_bank_a_lane] = wr_index_a_lane;
+            bank_wr_data_1_a_next[wr_bank_a_lane] = result_a_lane;
+            bank_wr_en_2_a_next[wr_bank_b_lane] = 1'b1;
+            bank_wr_addr_2_a_next[wr_bank_b_lane] = wr_index_b_lane;
+            bank_wr_data_2_a_next[wr_bank_b_lane] = result_b_lane;
           end
         end
       end

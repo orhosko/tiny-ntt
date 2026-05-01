@@ -22,7 +22,9 @@ module ntt_inverse #(
     parameter int Q              = 8380417,  // Modulus
     parameter int ADDR_WIDTH     = 8,        // log₂(N)
     parameter int REDUCTION_TYPE = 0,        // 0=Simple, 1=Barrett, 2=Montgomery
-    parameter int N_INV          = 8347681   // N^(-1) mod Q = 256^(-1) mod 8380417
+    parameter int N_INV          = 8347681,  // N^(-1) mod Q = 256^(-1) mod 8380417
+    parameter int PARALLEL       = 8,        // Butterflies per cycle
+    parameter int MULT_PIPELINE  = 3
 ) (
     input logic clk,
     input logic rst_n,
@@ -56,37 +58,56 @@ module ntt_inverse #(
 
   state_t state, next_state;
 
+  localparam int LOGN = $clog2(N);
+  localparam int TOTAL_BUTTERFLIES = N / 2;
+
   // Control FSM signals (for INTT)
   logic intt_start, intt_done, intt_busy;
-  logic [ADDR_WIDTH-1:0] fsm_addr_a, fsm_addr_b;
-  logic fsm_we_a, fsm_we_b;
-  logic                  fsm_re;
-  logic [ADDR_WIDTH-1:0] twiddle_addr;
-  logic                  butterfly_valid;
+  logic intt_done_latched;
+  logic [LOGN-1:0] stage;
+  logic [$clog2(TOTAL_BUTTERFLIES)-1:0] butterfly_base;
+  logic [$clog2(TOTAL_BUTTERFLIES)-1:0] cycle;
+  logic [PARALLEL-1:0] lane_valid;
 
-  // RAM signals
-  logic [ADDR_WIDTH-1:0] ram_addr_a, ram_addr_b;
-  logic [WIDTH-1:0] ram_din_a, ram_din_b;
-  logic [WIDTH-1:0] ram_dout_a, ram_dout_b;
-  logic ram_we_a, ram_we_b;
+  // Banked coefficient storage
+  localparam int BANKS = PARALLEL * 3;
+  localparam int BANK_DEPTH = (N + BANKS - 1) / BANKS;
+  localparam int BANK_ADDR_WIDTH = $clog2(BANKS);
+  localparam int BANK_DEPTH_WIDTH = $clog2(BANK_DEPTH);
 
-  // Inverse twiddle ROM signal
-  logic [WIDTH-1:0] twiddle_factor;
+  logic [WIDTH-1:0] mem_bank[0:BANKS-1][0:BANK_DEPTH-1];
 
-  // Butterfly signals
-  logic [WIDTH-1:0] butterfly_in_a, butterfly_in_b, butterfly_twiddle;
-  logic [WIDTH-1:0] butterfly_out_a, butterfly_out_b;
-  logic [WIDTH-1:0] butterfly_sum, butterfly_diff, butterfly_twiddled;
+  // Address generation
+  logic [ADDR_WIDTH-1:0] half_block;
+  logic [ADDR_WIDTH-1:0] block_size;
+  logic [ADDR_WIDTH-1:0] twiddle_input;
+  logic [PARALLEL-1:0][ADDR_WIDTH-1:0] addr0;
+  logic [PARALLEL-1:0][ADDR_WIDTH-1:0] addr1;
+  logic [PARALLEL-1:0][ADDR_WIDTH-1:0] twiddle_addr;
+  logic [PARALLEL-1:0][BANK_ADDR_WIDTH-1:0] addr0_bank;
+  logic [PARALLEL-1:0][BANK_ADDR_WIDTH-1:0] addr1_bank;
+  logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr0_index;
+  logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr1_index;
 
-  // Pipeline registers for butterfly outputs
-  logic [WIDTH-1:0] butterfly_out_a_reg, butterfly_out_b_reg;
-  logic                butterfly_valid_reg;
+  logic [PARALLEL-1:0][BANK_ADDR_WIDTH-1:0] addr0_bank_pipe[0:MULT_PIPELINE];
+  logic [PARALLEL-1:0][BANK_ADDR_WIDTH-1:0] addr1_bank_pipe[0:MULT_PIPELINE];
+  logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr0_index_pipe[0:MULT_PIPELINE];
+  logic [PARALLEL-1:0][BANK_DEPTH_WIDTH-1:0] addr1_index_pipe[0:MULT_PIPELINE];
+  logic [PARALLEL-1:0] lane_valid_pipe[0:MULT_PIPELINE];
+
+  // Twiddle and butterfly signals
+  logic [PARALLEL-1:0][WIDTH-1:0] twiddle_raw;
+  logic [PARALLEL-1:0][WIDTH-1:0] a_in;
+  logic [PARALLEL-1:0][WIDTH-1:0] b_in;
+  logic [PARALLEL-1:0][WIDTH-1:0] a_out;
+  logic [PARALLEL-1:0][WIDTH-1:0] b_out;
 
   // Scaling logic (needs 9 bits to reach N=256)
-  localparam int SCALE_LATENCY = 1;
+  localparam int SCALE_LATENCY = 0;
   logic [ADDR_WIDTH:0] scale_addr;  // 9 bits: 0-256
   logic [   WIDTH-1:0] scale_result;
-  logic                scale_we;
+  logic [ADDR_WIDTH:0] scale_addr_pipe[0:MULT_PIPELINE];
+  logic [MULT_PIPELINE:0] scale_valid_pipe;
 
 
   //============================================================================
@@ -107,11 +128,15 @@ module ntt_inverse #(
       end
 
       INTT_COMPUTE: begin
-        if (intt_done) next_state = SCALE;
+        if (intt_done_latched && !lane_valid_pipe[MULT_PIPELINE]) begin
+          next_state = SCALE;
+        end
       end
 
       SCALE: begin
-        if (scale_addr >= (N + SCALE_LATENCY)) next_state = DONE_STATE;
+        if (scale_addr >= N && !scale_valid_pipe[MULT_PIPELINE]) begin
+          next_state = DONE_STATE;
+        end
       end
 
       DONE_STATE: begin
@@ -127,6 +152,21 @@ module ntt_inverse #(
   // Start INTT when entering INTT_COMPUTE state
   assign intt_start = (state == IDLE && start);
 
+  // Latch INTT completion until pipeline drains
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      intt_done_latched <= 1'b0;
+    end else if (state != INTT_COMPUTE) begin
+      intt_done_latched <= 1'b0;
+    end else begin
+      if (intt_done) begin
+        intt_done_latched <= 1'b1;
+      end else if (intt_done_latched && !lane_valid_pipe[MULT_PIPELINE]) begin
+        intt_done_latched <= 1'b0;
+      end
+    end
+  end
+
   //============================================================================
   // Scaling Counter
   //============================================================================
@@ -134,74 +174,175 @@ module ntt_inverse #(
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       scale_addr <= '0;
+      for (int stage_idx = 0; stage_idx <= MULT_PIPELINE; stage_idx++) begin
+        scale_addr_pipe[stage_idx] <= '0;
+        scale_valid_pipe[stage_idx] <= 1'b0;
+      end
     end else begin
       if (state == SCALE) begin
-        if (scale_addr < (N + SCALE_LATENCY)) scale_addr <= scale_addr + 1;
+        if (scale_addr < N) begin
+          scale_addr <= scale_addr + 1'b1;
+        end
       end else begin
         scale_addr <= '0;
+      end
+
+      scale_addr_pipe[0] <= scale_addr;
+      scale_valid_pipe[0] <= (state == SCALE) && (scale_addr < N);
+      for (int stage_idx = 1; stage_idx <= MULT_PIPELINE; stage_idx++) begin
+        scale_addr_pipe[stage_idx] <= scale_addr_pipe[stage_idx - 1];
+        scale_valid_pipe[stage_idx] <= scale_valid_pipe[stage_idx - 1];
       end
     end
   end
 
   //============================================================================
-  // RAM Port Multiplexing
+  // Memory Interface
   //============================================================================
 
-  // Temporary variables for address computation
-  logic [ADDR_WIDTH-1:0] scale_read_addr, scale_write_addr;
+  function automatic [ADDR_WIDTH-1:0] bit_reverse(input logic [ADDR_WIDTH-1:0] value);
+    automatic logic [ADDR_WIDTH-1:0] reversed;
+    for (int i = 0; i < ADDR_WIDTH; i++) begin
+      reversed[i] = value[ADDR_WIDTH - 1 - i];
+    end
+    return reversed;
+  endfunction
+
+  function automatic [BANK_ADDR_WIDTH-1:0] bank_sel(input logic [ADDR_WIDTH-1:0] addr);
+    return addr % BANKS;
+  endfunction
+
+  function automatic [BANK_DEPTH_WIDTH-1:0] bank_index(input logic [ADDR_WIDTH-1:0] addr);
+    return addr / BANKS;
+  endfunction
+
+  // Temporary variables for scaling address computation
+  logic [ADDR_WIDTH-1:0] scale_read_addr;
 
   assign scale_read_addr = scale_addr[ADDR_WIDTH-1:0];
-  assign scale_write_addr = scale_addr_pipe1[ADDR_WIDTH-1:0] - 1'b1;
 
+
+  // Read interface (synchronous)
+  always_ff @(posedge clk) begin
+    read_data <= mem_bank[bank_sel(read_addr)][bank_index(read_addr)];
+  end
+
+  // Address generation for each lane
   always_comb begin
-    if (state == INTT_COMPUTE) begin
-      // INTT computation: FSM controls both ports
-      ram_addr_a = fsm_addr_a;
-      ram_addr_b = fsm_addr_b;
-      ram_we_a   = fsm_we_a;
-      ram_we_b   = fsm_we_b;
-      ram_din_a  = butterfly_out_a_reg;
-      ram_din_b  = butterfly_out_b_reg;
-    end else if (state == SCALE) begin
-      // Scaling: Read coefficient, multiply by N_INV, write back using Port B
-      ram_addr_a = scale_read_addr;
-      ram_addr_b = scale_we ? scale_write_addr : (load_coeff ? load_addr : '0);
-      ram_we_a   = 1'b0;
-      ram_we_b   = scale_we || load_coeff;
-      ram_din_a  = '0;
-      ram_din_b  = scale_we ? scale_result : load_data;
-    end else begin
-      // IDLE or DONE: User interface - use Port A for reads (where data was written)
-      ram_addr_a = load_coeff ? '0 : read_addr;  // Read from Port A
-      ram_addr_b = load_coeff ? load_addr : '0;  // Load via Port B
-      ram_we_a   = 1'b0;
-      ram_we_b   = load_coeff;
-      ram_din_a  = '0;
-      ram_din_b  = load_data;
+    half_block = ADDR_WIDTH'(1 << stage);
+    block_size = ADDR_WIDTH'(1 << (stage + 1));
+
+    for (int lane = 0; lane < PARALLEL; lane++) begin
+      int unsigned butterfly_idx;
+      int unsigned group;
+      int unsigned position;
+
+      butterfly_idx = butterfly_base + lane;
+
+      if (lane_valid[lane]) begin
+        group = butterfly_idx >> stage;
+        position = butterfly_idx & (half_block - 1);
+
+        addr0[lane] = ADDR_WIDTH'(group * block_size + position);
+        addr1[lane] = addr0[lane] + half_block;
+
+        addr0_bank[lane] = bank_sel(addr0[lane]);
+        addr1_bank[lane] = bank_sel(addr1[lane]);
+        addr0_index[lane] = bank_index(addr0[lane]);
+        addr1_index[lane] = bank_index(addr1[lane]);
+
+        twiddle_input = ADDR_WIDTH'(1 << (LOGN - stage - 1)) + group;
+        twiddle_addr[lane] = bit_reverse(twiddle_input);
+      end else begin
+        addr0[lane] = '0;
+        addr1[lane] = '0;
+        addr0_bank[lane] = '0;
+        addr1_bank[lane] = '0;
+        addr0_index[lane] = '0;
+        addr1_index[lane] = '0;
+        twiddle_addr[lane] = '0;
+      end
     end
   end
 
+  // Combinational reads
+  always_comb begin
+    for (int lane = 0; lane < PARALLEL; lane++) begin
+      a_in[lane] = mem_bank[addr0_bank[lane]][addr0_index[lane]];
+      b_in[lane] = mem_bank[addr1_bank[lane]][addr1_index[lane]];
+    end
+  end
 
-  // Read data from Port A (where INTT/scaling wrote results)
-  assign read_data = ram_dout_a;
-
-  //============================================================================
-  // Butterfly Input/Output Pipeline
-  //============================================================================
-
-  assign butterfly_in_a = ram_dout_a;
-  assign butterfly_in_b = ram_dout_b;
-  assign butterfly_twiddle = twiddle_factor;
-
+  // Pipeline address/valid alignment for mult latency
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      butterfly_out_a_reg <= '0;
-      butterfly_out_b_reg <= '0;
-      butterfly_valid_reg <= 1'b0;
+      for (int stage_idx = 0; stage_idx <= MULT_PIPELINE; stage_idx++) begin
+        for (int lane_idx = 0; lane_idx < PARALLEL; lane_idx++) begin
+          addr0_bank_pipe[stage_idx][lane_idx] <= '0;
+          addr1_bank_pipe[stage_idx][lane_idx] <= '0;
+          addr0_index_pipe[stage_idx][lane_idx] <= '0;
+          addr1_index_pipe[stage_idx][lane_idx] <= '0;
+          lane_valid_pipe[stage_idx][lane_idx] <= 1'b0;
+        end
+      end
     end else begin
-      butterfly_out_a_reg <= butterfly_out_a;
-      butterfly_out_b_reg <= butterfly_out_b;
-      butterfly_valid_reg <= butterfly_valid;
+      addr0_bank_pipe[0] <= addr0_bank;
+      addr1_bank_pipe[0] <= addr1_bank;
+      addr0_index_pipe[0] <= addr0_index;
+      addr1_index_pipe[0] <= addr1_index;
+      lane_valid_pipe[0] <= lane_valid;
+      for (int stage_idx = 1; stage_idx <= MULT_PIPELINE; stage_idx++) begin
+        addr0_bank_pipe[stage_idx] <= addr0_bank_pipe[stage_idx - 1];
+        addr1_bank_pipe[stage_idx] <= addr1_bank_pipe[stage_idx - 1];
+        addr0_index_pipe[stage_idx] <= addr0_index_pipe[stage_idx - 1];
+        addr1_index_pipe[stage_idx] <= addr1_index_pipe[stage_idx - 1];
+        lane_valid_pipe[stage_idx] <= lane_valid_pipe[stage_idx - 1];
+      end
+    end
+  end
+
+  // Twiddle ROM + butterfly per lane
+  genvar lane;
+  generate
+    for (lane = 0; lane < PARALLEL; lane++) begin : gen_inv_butterflies
+      inverse_twiddle_rom u_inverse_twiddle_rom (
+          .addr   (twiddle_addr[lane]),
+          .twiddle(twiddle_raw[lane])
+      );
+
+      ntt_butterfly_inverse #(
+          .WIDTH         (WIDTH),
+          .Q             (Q),
+          .REDUCTION_TYPE(REDUCTION_TYPE),
+          .MULT_PIPELINE (MULT_PIPELINE)
+      ) u_inv_butterfly (
+          .clk    (clk),
+          .rst_n  (rst_n),
+          .a      (a_in[lane]),
+          .b      (b_in[lane]),
+          .twiddle(twiddle_raw[lane]),
+          .a_out  (a_out[lane]),
+          .b_out  (b_out[lane])
+      );
+    end
+  endgenerate
+
+  // Write-back results / load coefficients
+  always_ff @(posedge clk) begin
+    if (load_coeff && state == IDLE) begin
+      mem_bank[bank_sel(load_addr)][bank_index(load_addr)] <= load_data;
+    end else if (state == INTT_COMPUTE) begin
+      for (int lane_idx = 0; lane_idx < PARALLEL; lane_idx++) begin
+        if (lane_valid_pipe[MULT_PIPELINE][lane_idx]) begin
+          mem_bank[addr0_bank_pipe[MULT_PIPELINE][lane_idx]]
+              [addr0_index_pipe[MULT_PIPELINE][lane_idx]] <= a_out[lane_idx];
+          mem_bank[addr1_bank_pipe[MULT_PIPELINE][lane_idx]]
+              [addr1_index_pipe[MULT_PIPELINE][lane_idx]] <= b_out[lane_idx];
+        end
+      end
+    end else if (state == SCALE && scale_valid_pipe[MULT_PIPELINE]) begin
+      mem_bank[bank_sel(scale_addr_pipe[MULT_PIPELINE][ADDR_WIDTH-1:0])]
+          [bank_index(scale_addr_pipe[MULT_PIPELINE][ADDR_WIDTH-1:0])] <= scale_result;
     end
   end
 
@@ -214,124 +355,35 @@ module ntt_inverse #(
   logic [WIDTH-1:0] scaling_factor;
   assign scaling_factor = N_INV;
 
-  // Pipeline the address/data to match data flow
-  logic [ADDR_WIDTH:0] scale_addr_pipe1;
-  logic [WIDTH-1:0] scale_data_pipe1;
-  logic scale_addr_pipe1_valid;
-
-  always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-      scale_addr_pipe1 <= '0;
-      scale_data_pipe1 <= '0;
-      scale_addr_pipe1_valid <= 1'b0;
-    end else begin
-      if (state == SCALE) begin
-        scale_addr_pipe1 <= scale_addr;
-        scale_data_pipe1 <= ram_dout_a;
-        scale_addr_pipe1_valid <= 1'b1;
-      end else begin
-        scale_addr_pipe1 <= '0;
-        scale_data_pipe1 <= '0;
-        scale_addr_pipe1_valid <= 1'b0;
-      end
-    end
-  end
-
-
-  // Write enable: valid when we have data 2 cycles after read
-  assign scale_we = (state == SCALE) && scale_addr_pipe1_valid && (scale_addr_pipe1 > 0) && (scale_addr_pipe1 <= N);
 
   // Modular multiplication for scaling
   mod_mult #(
       .WIDTH         (WIDTH),
       .Q             (Q),
-      .REDUCTION_TYPE(REDUCTION_TYPE)
+      .REDUCTION_TYPE(REDUCTION_TYPE),
+      .PIPELINE_STAGES(MULT_PIPELINE)
   ) scale_mult (
-      .a     (scale_data_pipe1),
+      .clk   (clk),
+      .rst_n (rst_n),
+      .a     (mem_bank[bank_sel(scale_read_addr)][bank_index(scale_read_addr)]),
       .b     (scaling_factor),
       .result(scale_result)
   );
 
-  //============================================================================
-  // Component Instantiation
-  //============================================================================
-
-  // Coefficient RAM (Dual-Port)
-  coeff_ram #(
-      .WIDTH     (WIDTH),
-      .DEPTH     (N),
-      .ADDR_WIDTH(ADDR_WIDTH)
-  ) u_coeff_ram (
-      .clk   (clk),
-      .rst_n (rst_n),
-      .addr_a(ram_addr_a),
-      .din_a (ram_din_a),
-      .dout_a(ram_dout_a),
-      .we_a  (ram_we_a),
-      .addr_b(ram_addr_b),
-      .din_b (ram_din_b),
-      .dout_b(ram_dout_b),
-      .we_b  (ram_we_b)
-  );
-
-  // Inverse Twiddle Factor ROM
-  inverse_twiddle_rom u_inverse_twiddle_rom (
-      .addr   (twiddle_addr),
-      .twiddle(twiddle_factor)
-  );
-
-  // Butterfly Unit (Gentleman-Sande inverse)
-  // a_out = a + b
-  // b_out = (a - b) * W
-  mod_add #(
-      .WIDTH(WIDTH),
-      .Q(Q)
-  ) u_inv_add (
-      .a     (butterfly_in_a),
-      .b     (butterfly_in_b),
-      .result(butterfly_sum)
-  );
-
-  mod_sub #(
-      .WIDTH(WIDTH),
-      .Q(Q)
-  ) u_inv_sub (
-      .a     (butterfly_in_a),
-      .b     (butterfly_in_b),
-      .result(butterfly_diff)
-  );
-
-  mod_mult #(
-      .WIDTH         (WIDTH),
-      .Q             (Q),
-      .REDUCTION_TYPE(REDUCTION_TYPE)
-  ) u_inv_mult (
-      .a     (butterfly_diff),
-      .b     (butterfly_twiddle),
-      .result(butterfly_twiddled)
-  );
-
-  assign butterfly_out_a = butterfly_sum;
-  assign butterfly_out_b = butterfly_twiddled;
-
-  // Control FSM (same as forward NTT)
-  ntt_control #(
-      .N         (N),
-      .ADDR_WIDTH(ADDR_WIDTH),
-      .INVERSE   (1'b1)
+  // Control FSM (parallel scheduling)
+  ntt_control_parallel #(
+      .N        (N),
+      .PARALLEL (PARALLEL)
   ) u_control (
-      .clk            (clk),
-      .rst_n          (rst_n),
-      .start          (intt_start),
-      .done           (intt_done),
-      .busy           (intt_busy),
-      .ram_addr_a     (fsm_addr_a),
-      .ram_addr_b     (fsm_addr_b),
-      .ram_we_a       (fsm_we_a),
-      .ram_we_b       (fsm_we_b),
-      .ram_re         (fsm_re),
-      .twiddle_addr   (twiddle_addr),
-      .butterfly_valid(butterfly_valid)
+      .clk        (clk),
+      .rst_n      (rst_n),
+      .start      (intt_start),
+      .done       (intt_done),
+      .busy       (intt_busy),
+      .stage      (stage),
+      .butterfly  (butterfly_base),
+      .cycle      (cycle),
+      .lane_valid (lane_valid)
   );
 
 endmodule

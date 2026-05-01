@@ -161,6 +161,41 @@ async def test_round_trip_impulse(dut):
     dut._log.info(f"✓ Round-trip impulse test passed ({cycles} cycles)")
 
 @cocotb.test()
+async def test_intt_all_ones(dut):
+    """Test INTT on all-ones input."""
+    dut._log.info("Testing INTT on all-ones input")
+
+    clock = Clock(dut.clk, 10, unit="ns")
+    cocotb.start_soon(clock.start())
+
+    # Reset
+    dut.rst_n.value = 0
+    dut.start.value = 0
+    await RisingEdge(dut.clk)
+    dut.rst_n.value = 1
+    await RisingEdge(dut.clk)
+
+    input_data = [1] * N
+    expected = ntt_inverse_reference(input_data, N, Q, PSI)
+
+    await load_coefficients(dut, input_data)
+    cycles = await run_intt(dut)
+
+    for _ in range(5):
+        await RisingEdge(dut.clk)
+
+    results = await read_coefficients(dut)
+
+    mismatches = sum(1 for i in range(N) if results[i] != expected[i])
+    if mismatches:
+        dut._log.error(f"  Expected: {expected[:10]}...")
+        dut._log.error(f"  Got: {results[:10]}...")
+
+    assert mismatches == 0, f"All-ones INTT failed with {mismatches} mismatches"
+    dut._log.info(f"✓ All-ones INTT test passed ({cycles} cycles)")
+
+
+@cocotb.test()
 async def test_round_trip_random(dut):
     """Test round-trip with random polynomials"""
     dut._log.info("Testing round-trip with random polynomials")

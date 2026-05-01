@@ -13,11 +13,14 @@
 //==============================================================================
 
 module ntt_poly_mult #(
-    parameter int N              = 256,
+    parameter int N              = 4096,
     parameter int WIDTH          = 32,
     parameter int Q              = 8380417,
     parameter int ADDR_WIDTH     = 8,
-    parameter int REDUCTION_TYPE = 0
+    parameter int REDUCTION_TYPE = 1,
+    parameter int PARALLEL       = 1,
+    parameter bit POINTWISE_PARALLEL = 1'b0,
+    parameter int MULT_PIPELINE  = 3
 ) (
     input  logic clk,
     input  logic rst_n,
@@ -64,14 +67,11 @@ module ntt_poly_mult #(
   logic [WIDTH-1:0] b_ntt[0:N-1];
   logic [WIDTH-1:0] c_ntt[0:N-1];
 
-  // Initialize arrays for simulation
+  // Initialize coefficient storage for simulation
   initial begin
     for (int i = 0; i < N; i++) begin
       a_mem[i] = '0;
       b_mem[i] = '0;
-      a_ntt[i] = '0;
-      b_ntt[i] = '0;
-      c_ntt[i] = '0;
     end
   end
 
@@ -100,14 +100,21 @@ module ntt_poly_mult #(
   logic [READ_COUNT_WIDTH-1:0] read_index;
   logic read_pending;
   logic [READ_COUNT_WIDTH-1:0] point_index;
+  logic [READ_COUNT_WIDTH-1:0] mul_index_pipe[0:MULT_PIPELINE];
+  logic [MULT_PIPELINE:0] mul_valid_pipe;
 
   logic fwd_started;
   logic inv_started;
+  logic clear_ntt;
 
   // Pointwise multiplier
   logic [WIDTH-1:0] mul_a;
   logic [WIDTH-1:0] mul_b;
   logic [WIDTH-1:0] mul_result;
+  logic [N*WIDTH-1:0] a_ntt_flat;
+  logic [N*WIDTH-1:0] b_ntt_flat;
+  logic [N*WIDTH-1:0] c_ntt_flat;
+  logic [WIDTH-1:0] c_ntt_parallel[0:N-1];
 
   //==============================================================================
   // Coefficient load storage
@@ -130,7 +137,9 @@ module ntt_poly_mult #(
       .WIDTH(WIDTH),
       .Q(Q),
       .ADDR_WIDTH(ADDR_WIDTH),
-      .REDUCTION_TYPE(REDUCTION_TYPE)
+      .REDUCTION_TYPE(REDUCTION_TYPE),
+      .PARALLEL(PARALLEL),
+      .MULT_PIPELINE(MULT_PIPELINE)
   ) u_forward (
       .clk       (clk),
       .rst_n     (rst_n),
@@ -152,7 +161,9 @@ module ntt_poly_mult #(
       .WIDTH(WIDTH),
       .Q(Q),
       .ADDR_WIDTH(ADDR_WIDTH),
-      .REDUCTION_TYPE(REDUCTION_TYPE)
+      .REDUCTION_TYPE(REDUCTION_TYPE),
+      .PARALLEL(PARALLEL),
+      .MULT_PIPELINE(MULT_PIPELINE)
   ) u_inverse (
       .clk       (clk),
       .rst_n     (rst_n),
@@ -169,19 +180,53 @@ module ntt_poly_mult #(
   //==============================================================================
   // Pointwise multiplier
   //==============================================================================
-  mod_mult #(
-      .WIDTH(WIDTH),
-      .Q(Q),
-      .REDUCTION_TYPE(REDUCTION_TYPE)
-  ) u_pointwise_mult (
-      .a(mul_a),
-      .b(mul_b),
-      .result(mul_result)
-  );
+  always_comb begin
+    for (int i = 0; i < N; i++) begin
+      a_ntt_flat[i * WIDTH +: WIDTH] = a_ntt[i];
+      b_ntt_flat[i * WIDTH +: WIDTH] = b_ntt[i];
+    end
+  end
+
+  for (genvar i = 0; i < N; i++) begin : gen_unpack_parallel
+    assign c_ntt_parallel[i] = c_ntt_flat[i * WIDTH +: WIDTH];
+  end
+
+  generate
+    if (POINTWISE_PARALLEL) begin : gen_pointwise_parallel
+      ntt_pointwise_mult #(
+          .N(N),
+          .WIDTH(WIDTH),
+          .Q(Q),
+          .REDUCTION_TYPE(REDUCTION_TYPE),
+          .MULT_PIPELINE(MULT_PIPELINE)
+      ) u_pointwise_mult_parallel (
+          .clk        (clk),
+          .rst_n      (rst_n),
+          .poly_a_flat(a_ntt_flat),
+          .poly_b_flat(b_ntt_flat),
+          .poly_c_flat(c_ntt_flat)
+      );
+    end else begin : gen_pointwise_serial
+      mod_mult #(
+          .WIDTH(WIDTH),
+          .Q(Q),
+          .REDUCTION_TYPE(REDUCTION_TYPE),
+          .PIPELINE_STAGES(MULT_PIPELINE)
+      ) u_pointwise_mult (
+          .clk   (clk),
+          .rst_n (rst_n),
+          .a(mul_a),
+          .b(mul_b),
+          .result(mul_result)
+      );
+    end
+  endgenerate
 
   //==============================================================================
   // FSM
   //==============================================================================
+  assign clear_ntt = (state == IDLE && next_state == LOAD_A);
+
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       state <= IDLE;
@@ -197,13 +242,6 @@ module ntt_poly_mult #(
       if (state != next_state) begin
         if (next_state == LOAD_A || next_state == LOAD_B || next_state == LOAD_INV) begin
           load_index <= '0;
-        end
-        if (next_state == LOAD_A && state == IDLE) begin
-          for (int i = 0; i < N; i++) begin
-            a_ntt[i] <= '0;
-            b_ntt[i] <= '0;
-            c_ntt[i] <= '0;
-          end
         end
         if (next_state == READ_A || next_state == READ_B) begin
           read_index <= '0;
@@ -227,9 +265,6 @@ module ntt_poly_mult #(
           end
         end
         READ_A: begin
-          if (read_pending) begin
-            a_ntt[read_index - 1] <= fwd_read_data;
-          end
           if (read_index < N) begin
             read_index <= read_index + 1'b1;
             read_pending <= 1'b1;
@@ -238,9 +273,6 @@ module ntt_poly_mult #(
           end
         end
         READ_B: begin
-          if (read_pending) begin
-            b_ntt[read_index - 1] <= fwd_read_data;
-          end
           if (read_index < N) begin
             read_index <= read_index + 1'b1;
             read_pending <= 1'b1;
@@ -249,11 +281,16 @@ module ntt_poly_mult #(
           end
         end
         POINTWISE: begin
-          if (point_index < N) begin
-            c_ntt[point_index] <= mul_result;
-          end
-          if (point_index < N) begin
-            point_index <= point_index + 1'b1;
+          if (POINTWISE_PARALLEL) begin
+            if (point_index < MULT_PIPELINE[READ_COUNT_WIDTH-1:0]) begin
+              point_index <= point_index + 1'b1;
+            end else begin
+              point_index <= N[READ_COUNT_WIDTH-1:0];
+            end
+          end else begin
+            if (point_index < N) begin
+              point_index <= point_index + 1'b1;
+            end
           end
         end
         RUN_A: begin
@@ -264,6 +301,81 @@ module ntt_poly_mult #(
         RUN_INV: begin
           if (inv_start) begin
             inv_started <= 1'b1;
+          end
+        end
+        default: begin
+        end
+      endcase
+    end
+  end
+
+  //==============================================================================
+  // Pointwise multiply pipeline tracking (serial)
+  //==============================================================================
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      for (int stage_idx = 0; stage_idx <= MULT_PIPELINE; stage_idx++) begin
+        mul_index_pipe[stage_idx] <= '0;
+        mul_valid_pipe[stage_idx] <= 1'b0;
+      end
+    end else if (state == POINTWISE && !POINTWISE_PARALLEL) begin
+      mul_index_pipe[0] <= point_index;
+      mul_valid_pipe[0] <= (point_index < N);
+      for (int stage_idx = 1; stage_idx <= MULT_PIPELINE; stage_idx++) begin
+        mul_index_pipe[stage_idx] <= mul_index_pipe[stage_idx - 1];
+        mul_valid_pipe[stage_idx] <= mul_valid_pipe[stage_idx - 1];
+      end
+    end else begin
+      for (int stage_idx = 0; stage_idx <= MULT_PIPELINE; stage_idx++) begin
+        mul_index_pipe[stage_idx] <= '0;
+        mul_valid_pipe[stage_idx] <= 1'b0;
+      end
+    end
+  end
+
+  //==============================================================================
+  // NTT coefficient storage
+  //==============================================================================
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      for (int i = 0; i < N; i++) begin
+        a_ntt[i] <= '0;
+        b_ntt[i] <= '0;
+        c_ntt[i] <= '0;
+      end
+    end else if (clear_ntt) begin
+      for (int i = 0; i < N; i++) begin
+        a_ntt[i] <= '0;
+        b_ntt[i] <= '0;
+        c_ntt[i] <= '0;
+      end
+    end else begin
+      case (state)
+        READ_A: begin
+          if (read_pending) begin
+            a_ntt[read_index - 1] <= fwd_read_data;
+          end
+        end
+        READ_B: begin
+          if (read_pending) begin
+            b_ntt[read_index - 1] <= fwd_read_data;
+          end
+        end
+        POINTWISE: begin
+          if (POINTWISE_PARALLEL) begin
+            if (point_index == MULT_PIPELINE[READ_COUNT_WIDTH-1:0]) begin
+              for (int i = 0; i < N; i++) begin
+                c_ntt[i] <= c_ntt_parallel[i];
+              end
+            end
+          end else begin
+            if (MULT_PIPELINE == 0) begin
+              if (point_index < N) begin
+                c_ntt[point_index] <= mul_result;
+              end
+            end else if (mul_valid_pipe[MULT_PIPELINE]) begin
+              c_ntt[mul_index_pipe[MULT_PIPELINE]] <= mul_result;
+            end
           end
         end
         default: begin
@@ -298,7 +410,15 @@ module ntt_poly_mult #(
         if (read_index >= N && !read_pending) next_state = POINTWISE;
       end
       POINTWISE: begin
-        if (point_index >= N) next_state = LOAD_INV;
+        if (POINTWISE_PARALLEL) begin
+          if (point_index >= N) next_state = LOAD_INV;
+        end else if (MULT_PIPELINE == 0) begin
+          if (point_index >= N) next_state = LOAD_INV;
+        end else begin
+          if (point_index >= N && !mul_valid_pipe[MULT_PIPELINE]) begin
+            next_state = LOAD_INV;
+          end
+        end
       end
       LOAD_INV: begin
         if (load_index >= N) next_state = RUN_INV;

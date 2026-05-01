@@ -29,9 +29,9 @@ module ntt_cg_address_gen #(
   localparam LOGN = $clog2(N);
 
   integer lane;
-  integer block_size_int;
   integer butterfly_idx;
   integer group;
+  integer twiddle_shift;
   integer addr0_int;
   integer addr1_int;
   integer twiddle_exp;
@@ -55,7 +55,7 @@ module ntt_cg_address_gen #(
   endfunction
 
   always @(*) begin
-    block_size_int = N >> (stage + 1);
+    twiddle_shift = LOGN - stage;
 
     for (lane = 0; lane < PARALLEL; lane = lane + 1) begin
       butterfly_idx = butterfly_base + lane;
@@ -85,7 +85,10 @@ module ntt_cg_address_gen #(
         addr0_out_index[lane*BANK_DEPTH_WIDTH +: BANK_DEPTH_WIDTH] = bank_index(addr0_out_lane);
         addr1_out_index[lane*BANK_DEPTH_WIDTH +: BANK_DEPTH_WIDTH] = bank_index(addr1_out_lane);
 
-        twiddle_exp = (block_size_int * group) << 1;
+        // Since N is a power of two, `block_size_int` is also a power of two.
+        // Replacing the multiply with a shift keeps the twiddle address path
+        // out of DSPs and shortens the BRAM address critical path.
+        twiddle_exp = group << twiddle_shift;
         twiddle_addr[lane*ADDR_WIDTH +: ADDR_WIDTH] = twiddle_exp[ADDR_WIDTH-1:0];
       end else begin
         addr0[lane*ADDR_WIDTH +: ADDR_WIDTH] = 0;

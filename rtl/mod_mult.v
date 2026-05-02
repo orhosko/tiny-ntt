@@ -79,6 +79,7 @@ module mod_mult #(
       wire [WIDTH-1:0] montgomery_result_comb;
 
       montgomery_reduction #(
+          .WIDTH        (WIDTH),
           .Q            (Q),
           .K            (K_MONTGOMERY),
           .Q_PRIME      (Q_PRIME),

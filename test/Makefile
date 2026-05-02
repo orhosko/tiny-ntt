@@ -20,6 +20,7 @@ WAVES ?= 0
 export WAVES
 
 export PYTHONPATH := $(CURDIR):$(PYTHONPATH)
+PWD := $(CURDIR)
 TWIDDLE_FORWARD_SRC ?= $(CURDIR)/../rtl/twiddle_forward_4096.hex
 TWIDDLE_INVERSE_SRC ?= $(CURDIR)/../rtl/twiddle_inverse_4096.hex
 NTT_PARAM_ARGS ?=

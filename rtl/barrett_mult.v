@@ -23,6 +23,7 @@ module barrett_mult #(
   wire [WIDTH-1:0] result_comb;
 
   barrett_reduction #(
+      .WIDTH        (WIDTH),
       .Q            (Q),
       .K            (K),
       .MU           (MU),

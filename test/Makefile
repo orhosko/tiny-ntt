@@ -23,6 +23,8 @@ export PYTHONPATH := $(CURDIR):$(PYTHONPATH)
 TWIDDLE_FORWARD_SRC ?= $(CURDIR)/../rtl/twiddle_forward_4096.hex
 TWIDDLE_INVERSE_SRC ?= $(CURDIR)/../rtl/twiddle_inverse_4096.hex
 NTT_PARAM_ARGS ?=
+REDUCTION_TYPE ?= 0
+export REDUCTION_TYPE
 
 ifeq ($(SIM),verilator)
     COMPILE_ARGS += --timing
@@ -112,7 +114,7 @@ test-butterfly: clean
 	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
 		MODULE=cocotb_tests.test_ntt_butterfly \
 		TOPLEVEL=ntt_butterfly \
-		VERILOG_SOURCES="$(PWD)/../rtl/mod_add.v $(PWD)/../rtl/mod_sub.v $(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/montgomery_reduction.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/ntt_butterfly.v" \
+		VERILOG_SOURCES="$(PWD)/../rtl/mod_add.v $(PWD)/../rtl/mod_sub.v $(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/barrett_mult.v $(PWD)/../rtl/montgomery_reduction.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/ntt_butterfly.v" \
 		sim
 
 # Test inverse butterfly unit
@@ -124,7 +126,7 @@ test-butterfly-inverse: clean
 	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
 		MODULE=cocotb_tests.test_butterfly_inverse \
 		TOPLEVEL=ntt_butterfly_inverse \
-		VERILOG_SOURCES="$(PWD)/../rtl/mod_add.v $(PWD)/../rtl/mod_sub.v $(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/montgomery_reduction.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/ntt_butterfly_inverse.v" \
+		VERILOG_SOURCES="$(PWD)/../rtl/mod_add.v $(PWD)/../rtl/mod_sub.v $(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/barrett_mult.v $(PWD)/../rtl/montgomery_reduction.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/ntt_butterfly_inverse.v" \
 		sim
 
 # Test twiddle ROM
@@ -160,7 +162,8 @@ test-ntt-mult: clean
 	@$(MAKE) -f $(firstword $(MAKEFILE_LIST)) \
 		MODULE=cocotb_tests.test_ntt_mult \
 		TOPLEVEL=ntt_pointwise_mult \
-		VERILOG_SOURCES="$(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/montgomery_reduction.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/ntt_pointwise_mult.v" \
+		COMPILE_ARGS='$(COMPILE_ARGS) -Pntt_pointwise_mult.REDUCTION_TYPE=$(REDUCTION_TYPE)' \
+		VERILOG_SOURCES="$(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/barrett_mult.v $(PWD)/../rtl/montgomery_reduction.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/ntt_pointwise_mult.v" \
 		sim
 
 # Test NTT control FSM
@@ -186,7 +189,7 @@ test-ntt-poly: clean copy-hex-files
 		MODULE=cocotb_tests.test_ntt_poly_mult \
 		TOPLEVEL=ntt_poly_mult \
 		COMPILE_ARGS='$(COMPILE_ARGS) $(NTT_PARAM_ARGS)' \
-		VERILOG_SOURCES="$(PWD)/../rtl/ntt_poly_mult.sv $(PWD)/../rtl/coeff_ram.v $(PWD)/../rtl/ntt_forward.sv $(PWD)/../rtl/ntt_coeff_banks.v $(PWD)/../rtl/ntt_coeff_bank_single.v $(PWD)/../rtl/ntt_cg_address_gen.v $(PWD)/../rtl/twiddle_bram.v $(PWD)/../rtl/twiddle_bram_multiport.v $(PWD)/../rtl/ntt_bank_switch.v $(PWD)/../rtl/ntt_control_parallel.v $(PWD)/../rtl/ntt_inverse.sv $(PWD)/../rtl/ntt_pointwise_mult.v $(PWD)/../rtl/twiddle_rom.v $(PWD)/../rtl/ntt_butterfly.v $(PWD)/../rtl/ntt_butterfly_inverse.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/mod_add.v $(PWD)/../rtl/mod_sub.v $(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/montgomery_reduction.v" \
+		VERILOG_SOURCES="$(PWD)/../rtl/ntt_poly_mult.sv $(PWD)/../rtl/coeff_ram.v $(PWD)/../rtl/ntt_forward.sv $(PWD)/../rtl/ntt_coeff_banks.v $(PWD)/../rtl/ntt_coeff_bank_single.v $(PWD)/../rtl/ntt_cg_address_gen.v $(PWD)/../rtl/twiddle_bram.v $(PWD)/../rtl/twiddle_bram_multiport.v $(PWD)/../rtl/ntt_bank_switch.v $(PWD)/../rtl/ntt_control_parallel.v $(PWD)/../rtl/ntt_inverse.sv $(PWD)/../rtl/ntt_pointwise_mult.v $(PWD)/../rtl/twiddle_rom.v $(PWD)/../rtl/ntt_butterfly.v $(PWD)/../rtl/ntt_butterfly_inverse.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/mod_add.v $(PWD)/../rtl/mod_sub.v $(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/barrett_mult.v $(PWD)/../rtl/montgomery_reduction.v" \
 		sim
 
 # Test NTT forward (full integration)
@@ -199,7 +202,7 @@ test-ntt-forward: clean copy-hex-files
 		MODULE=cocotb_tests.test_ntt_forward \
 		TOPLEVEL=ntt_forward \
 		COMPILE_ARGS='$(COMPILE_ARGS) $(NTT_PARAM_ARGS)' \
-		VERILOG_SOURCES="$(PWD)/../rtl/ntt_forward.sv $(PWD)/../rtl/ntt_coeff_banks.v $(PWD)/../rtl/ntt_coeff_bank_single.v $(PWD)/../rtl/ntt_cg_address_gen.v $(PWD)/../rtl/twiddle_bram.v $(PWD)/../rtl/twiddle_bram_multiport.v $(PWD)/../rtl/ntt_bank_switch.v $(PWD)/../rtl/ntt_control_parallel.v $(PWD)/../rtl/twiddle_rom.v $(PWD)/../rtl/ntt_butterfly.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/mod_add.v $(PWD)/../rtl/mod_sub.v $(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/montgomery_reduction.v" \
+		VERILOG_SOURCES="$(PWD)/../rtl/ntt_forward.sv $(PWD)/../rtl/ntt_coeff_banks.v $(PWD)/../rtl/ntt_coeff_bank_single.v $(PWD)/../rtl/ntt_cg_address_gen.v $(PWD)/../rtl/twiddle_bram.v $(PWD)/../rtl/twiddle_bram_multiport.v $(PWD)/../rtl/ntt_bank_switch.v $(PWD)/../rtl/ntt_control_parallel.v $(PWD)/../rtl/twiddle_rom.v $(PWD)/../rtl/ntt_butterfly.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/mod_add.v $(PWD)/../rtl/mod_sub.v $(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/barrett_mult.v $(PWD)/../rtl/montgomery_reduction.v" \
 		sim
 
 # Run all tests
@@ -244,7 +247,7 @@ test-ntt-inverse: clean copy-hex-files
 		MODULE=cocotb_tests.test_ntt_inverse \
 		TOPLEVEL=ntt_inverse \
 		COMPILE_ARGS='$(COMPILE_ARGS) $(NTT_PARAM_ARGS)' \
-		VERILOG_SOURCES="$(PWD)/../rtl/ntt_inverse.sv $(PWD)/../rtl/ntt_control_parallel.v $(PWD)/../rtl/ntt_coeff_banks.v $(PWD)/../rtl/ntt_coeff_bank_single.v $(PWD)/../rtl/ntt_cg_address_gen.v $(PWD)/../rtl/ntt_bank_switch.v $(PWD)/../rtl/twiddle_bram.v $(PWD)/../rtl/twiddle_bram_multiport.v $(PWD)/../rtl/ntt_butterfly.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/mod_add.v $(PWD)/../rtl/mod_sub.v $(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/montgomery_reduction.v" \
+		VERILOG_SOURCES="$(PWD)/../rtl/ntt_inverse.sv $(PWD)/../rtl/ntt_control_parallel.v $(PWD)/../rtl/ntt_coeff_banks.v $(PWD)/../rtl/ntt_coeff_bank_single.v $(PWD)/../rtl/ntt_cg_address_gen.v $(PWD)/../rtl/ntt_bank_switch.v $(PWD)/../rtl/twiddle_bram.v $(PWD)/../rtl/twiddle_bram_multiport.v $(PWD)/../rtl/ntt_butterfly.v $(PWD)/../rtl/mod_mult.v $(PWD)/../rtl/mod_add.v $(PWD)/../rtl/mod_sub.v $(PWD)/../rtl/barrett_reduction.v $(PWD)/../rtl/barrett_mult.v $(PWD)/../rtl/montgomery_reduction.v" \
 		sim
 
 test-ntt-control-1024:

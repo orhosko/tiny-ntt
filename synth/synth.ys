@@ -2,6 +2,7 @@
 # Edit rtl/ntt_pointwise_mult.v to change REDUCTION_TYPE parameter
 
 read_verilog ../rtl/barrett_reduction.v
+read_verilog ../rtl/barrett_mult.v
 read_verilog ../rtl/montgomery_reduction.v
 read_verilog ../rtl/mod_mult.v
 read_verilog ../rtl/ntt_pointwise_mult.v

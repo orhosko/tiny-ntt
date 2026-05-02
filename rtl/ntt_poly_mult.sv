@@ -14,7 +14,7 @@
 
 module ntt_poly_mult #(
     parameter int N                = 4096,
-    parameter int WIDTH            = 32,
+    parameter int WIDTH            = 24,
     parameter int Q                = 8380417,
     parameter int ADDR_WIDTH       = $clog2(N),
     parameter int REDUCTION_TYPE   = 1,

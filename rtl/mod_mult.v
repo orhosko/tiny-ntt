@@ -73,15 +73,6 @@ module mod_mult #(
   endfunction
 
   generate
-    if (WIDTH > MOD_WIDTH) begin : gen_unused_inputs
-      (* keep *) wire unused_a;
-      (* keep *) wire unused_b;
-      assign unused_a = ^a[WIDTH-1:MOD_WIDTH];
-      assign unused_b = ^b[WIDTH-1:MOD_WIDTH];
-    end
-  endgenerate
-
-  generate
     if (PIPELINE_STAGES == 0) begin : gen_no_pipe
       assign mult_result = a_trim * b_trim;
       assign result = rst_n ? result_comb : {WIDTH{1'b0}};

@@ -25,7 +25,7 @@ module ntt_butterfly #(
       integer i;
       reg [WIDTH-1:0] a_pipe [0:MULT_PIPELINE];
 
-      always @(posedge clk or negedge rst_n) begin
+      always @(posedge clk) begin
         if (!rst_n) begin
           for (i = 0; i <= MULT_PIPELINE; i = i + 1)
             a_pipe[i] <= 0;

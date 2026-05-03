@@ -24,7 +24,7 @@ module ntt_bank_switch #(
   assign write_bank_sel = ~stage[0];
   assign pipe_active    = |lane_valid_last;
 
-  always @(posedge clk or negedge rst_n) begin
+  always @(posedge clk) begin
     if (!rst_n) begin
       write_bank_sel_pipe <= 0;
     end else begin

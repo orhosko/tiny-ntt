@@ -73,18 +73,9 @@ module ntt_poly_mult #(
 
   assign debug_state = state;
 
-  logic [WIDTH-1:0] a_mem[0:N-1];
-  logic [WIDTH-1:0] b_mem[0:N-1];
   logic [WIDTH-1:0] a_ntt[0:N-1];
   logic [WIDTH-1:0] b_ntt[0:N-1];
   logic [WIDTH-1:0] c_ntt[0:N-1];
-
-  initial begin
-    for (int i = 0; i < N; i++) begin
-      a_mem[i] = '0;
-      b_mem[i] = '0;
-    end
-  end
 
   logic fwd_start;
   logic fwd_busy;
@@ -135,16 +126,52 @@ module ntt_poly_mult #(
   logic [N*WIDTH-1:0] b_ntt_flat;
   logic [N*WIDTH-1:0] c_ntt_flat;
   logic [WIDTH-1:0] c_ntt_parallel[0:N-1];
+  logic [WIDTH-1:0] a_mem_read_data;
+  logic [WIDTH-1:0] b_mem_read_data;
+  wire input_mem_read_active = (state == LOAD_A) || (state == LOAD_B);
+  wire [ADDR_WIDTH-1:0] input_mem_read_addr =
+      (input_mem_read_active && (load_index < N)) ? load_index[ADDR_WIDTH-1:0]
+                                                  : debug_read_addr;
 
-  always_ff @(posedge clk) begin
-    if (load_coeff && state == IDLE) begin
-      if (load_sel) begin
-        b_mem[load_addr] <= load_data;
-      end else begin
-        a_mem[load_addr] <= load_data;
-      end
-    end
-  end
+  bram_tdp #(
+      .WIDTH     (WIDTH),
+      .DEPTH     (N),
+      .ADDR_WIDTH(ADDR_WIDTH),
+      .WRITE_MODE(1),
+      .INIT_ZERO (1)
+  ) u_a_input_mem (
+      .clk   (clk),
+      .en_a  (1'b1),
+      .we_a  (load_coeff && (state == IDLE) && !load_sel),
+      .addr_a(load_addr),
+      .din_a (load_data),
+      .dout_a(),
+      .en_b  (1'b1),
+      .we_b  (1'b0),
+      .addr_b(input_mem_read_addr),
+      .din_b ({WIDTH{1'b0}}),
+      .dout_b(a_mem_read_data)
+  );
+
+  bram_tdp #(
+      .WIDTH     (WIDTH),
+      .DEPTH     (N),
+      .ADDR_WIDTH(ADDR_WIDTH),
+      .WRITE_MODE(1),
+      .INIT_ZERO (1)
+  ) u_b_input_mem (
+      .clk   (clk),
+      .en_a  (1'b1),
+      .we_a  (load_coeff && (state == IDLE) && load_sel),
+      .addr_a(load_addr),
+      .din_a (load_data),
+      .dout_a(),
+      .en_b  (1'b1),
+      .we_b  (1'b0),
+      .addr_b(input_mem_read_addr),
+      .din_b ({WIDTH{1'b0}}),
+      .dout_b(b_mem_read_data)
+  );
 
   ntt_forward #(
       .N(N),
@@ -325,7 +352,7 @@ module ntt_poly_mult #(
 
       case (state)
         LOAD_A, LOAD_B: begin
-          if (load_index < N) begin
+          if (load_index <= N[READ_COUNT_WIDTH-1:0]) begin
             load_index <= load_index + 1'b1;
           end
         end
@@ -414,7 +441,7 @@ module ntt_poly_mult #(
   generate
     if (POINTWISE_PARALLEL) begin : gen_ntt_storage_parallel
       for (genvar i = 0; i < N; i++) begin : gen_ntt_storage
-        always_ff @(posedge clk or negedge rst_n) begin
+        always_ff @(posedge clk) begin
           if (!rst_n) begin
             a_ntt[i] <= '0;
             b_ntt[i] <= '0;
@@ -457,7 +484,7 @@ module ntt_poly_mult #(
         if (start) next_state = LOAD_A;
       end
       LOAD_A: begin
-        if (load_index >= N) next_state = RUN_A;
+        if (load_index > N[READ_COUNT_WIDTH-1:0]) next_state = RUN_A;
       end
       RUN_A: begin
         if (fwd_done) next_state = READ_A;
@@ -466,7 +493,7 @@ module ntt_poly_mult #(
         if (read_index >= N && !read_pending) next_state = LOAD_B;
       end
       LOAD_B: begin
-        if (load_index >= N) next_state = RUN_B;
+        if (load_index > N[READ_COUNT_WIDTH-1:0]) next_state = RUN_B;
       end
       RUN_B: begin
         if (fwd_done) next_state = READ_B;
@@ -507,11 +534,12 @@ module ntt_poly_mult #(
 
   assign fwd_start = (state == RUN_A || state == RUN_B) && !fwd_started;
 
-  assign fwd_load = (state == LOAD_A || state == LOAD_B) && (load_index < N);
-  assign fwd_load_addr = load_index[ADDR_WIDTH-1:0];
-  assign fwd_load_data = (load_index < N)
-                         ? ((state == LOAD_A) ? a_mem[load_index] : b_mem[load_index])
-                         : '0;
+  assign fwd_load = (state == LOAD_A || state == LOAD_B) &&
+                    (load_index > 0) &&
+                    (load_index <= N[READ_COUNT_WIDTH-1:0]);
+  assign fwd_load_addr = load_index[ADDR_WIDTH-1:0] - ADDR_WIDTH'(1);
+  assign fwd_load_data = (state == LOAD_A) ? a_mem_read_data :
+                         (state == LOAD_B) ? b_mem_read_data : '0;
 
   assign fwd_read_addr = (state == READ_A || state == READ_B) ?
                          (read_index < N ? read_index[ADDR_WIDTH-1:0] : ADDR_WIDTH'(N - 1)) :
@@ -556,6 +584,6 @@ module ntt_poly_mult #(
   assign inv_read_addr = (state == DONE_STATE || state == IDLE) ? read_addr : '0;
   assign read_data = inv_read_data;
 
-  assign debug_read_data = debug_read_sel ? b_mem[debug_read_addr] : a_mem[debug_read_addr];
+  assign debug_read_data = debug_read_sel ? b_mem_read_data : a_mem_read_data;
 
 endmodule

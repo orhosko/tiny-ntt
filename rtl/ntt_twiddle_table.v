@@ -44,7 +44,7 @@ module ntt_twiddle_table #(
       .result(tw_mul_result)
   );
 
-  always @(posedge clk or negedge rst_n) begin
+  always @(posedge clk) begin
     if (!rst_n)
       tw_mul_count <= 0;
     else if (tw_mul_start)
@@ -58,7 +58,7 @@ module ntt_twiddle_table #(
   genvar i;
   generate
     for (i = 0; i < TWIDDLE_DEPTH; i = i + 1) begin : gen_twiddle_table
-      always @(posedge clk or negedge rst_n) begin
+      always @(posedge clk) begin
         if (!rst_n) begin
           if (i == 0)
             twiddle_table[i] <= {{(WIDTH-1){1'b0}}, 1'b1};
@@ -78,7 +78,7 @@ module ntt_twiddle_table #(
     end
   endgenerate
 
-  always @(posedge clk or negedge rst_n) begin
+  always @(posedge clk) begin
     if (!rst_n) begin
       tw_state <= TW_IDLE;
       tw_ready <= 1'b0;

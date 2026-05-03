@@ -41,7 +41,7 @@ module ntt_control_parallel #(
 
   integer lane;
 
-  always @(posedge clk or negedge rst_n) begin
+  always @(posedge clk) begin
     if (!rst_n) begin
       state       <= IDLE;
       stage       <= 0;

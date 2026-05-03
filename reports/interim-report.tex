@@ -1,0 +1,475 @@
+\documentclass[a4paper, 12pt, titlepage]{article}
+\usepackage[a4paper,top=2.5cm,bottom=2.5cm,left=3.3cm,right=2.2cm]{geometry}
+
+% Page headers are set to top right
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\renewcommand{\footrulewidth}{0pt} % clear rulers
+\renewcommand{\headrulewidth}{0pt}
+\lhead{} % Empty left header
+\rhead{\thepage} % Page number at the right header
+\cfoot{} % Clear center of the footer
+
+% Use American English for dates etc.
+%\usepackage[american]{babel}
+% If document is in Turkish then use
+% \usepackage[turkish]{babel}
+% or for both
+\usepackage[turkish,american]{babel}
+
+% Indent at section beginnings
+%\usepackage{indentfirst}
+
+% utf-8 support
+\usepackage[utf8]{inputenc}
+
+% Figure placement
+\usepackage{float}
+
+% An enumeration package for flexible enumeration
+\usepackage{enumitem}
+
+% Helvetica Sans-serif fonts
+\usepackage{helvet}
+\usepackage{sectsty}
+\allsectionsfont{\normalfont\sffamily\bfseries}
+\sectionfont{\fontsize{18pt}{21.6pt}\sffamily\bfseries}
+\subsectionfont{\fontsize{16pt}{19.2pt}\sffamily\bfseries}
+\subsubsectionfont{\fontsize{14pt}{16.8pt}\sffamily\bfseries}
+
+% Paragraph spacings
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{12pt}
+
+% Courier monospace font
+\usepackage{courier}
+
+% Table of contents dot fill
+\usepackage{tocloft}
+\renewcommand{\cftsecleader}{\cftdotfill{\cftdotsep}}
+\tocloftpagestyle{fancy}
+\renewcommand{\cfttoctitlefont}{\sffamily\Large\bfseries}
+\setlength{\cftbeforesecskip}{6pt}
+
+% Links, both local and external
+\usepackage{hyperref}
+\hypersetup{
+    unicode=true,
+    colorlinks=true,
+    urlcolor=blue,
+    citecolor=black,
+    menucolor=black,
+    linkcolor=black
+}
+
+% Figure captions are bold
+\usepackage[labelfont=bf,font=sf]{caption}
+
+% Pseudocode from algorithmicx package
+\usepackage{algorithmicx}
+\usepackage{algpseudocode}
+\usepackage[section,boxed]{algorithm}
+\captionsetup[algorithm]{labelfont=bf,font=sf,justification=centering,position=top}
+
+% For fitting tables into the page width
+\usepackage{makecell}
+\renewcommand{\theadalign}{cc} % Centering and at the middle
+\renewcommand{\theadfont}{\bfseries} % Bold table headers
+\usepackage{tabularx}
+\newcolumntype{Y}{>{\centering\arraybackslash}X}
+
+% Listings for implemented code
+\usepackage{listings}
+\lstset{basicstyle=\ttfamily,frame=lines,tabsize=4}
+\renewcommand{\lstlistingname}{Listing}
+\lstset{
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    escapeinside={\%*}{*)},
+    frame=single,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    xleftmargin=8pt,
+}
+
+% A powerful math notation package
+\usepackage{amsmath}
+
+% --------------------------------
+\usepackage{comment}
+\usepackage[table]{xcolor}
+\usepackage{changepage}
+\usepackage{longtable}
+\usepackage{colortbl}
+
+\definecolor{LightBlue}{HTML}{D9EAF7}
+\definecolor{LightGreen}{HTML}{D9F7D9}
+\definecolor{LightYellow}{HTML}{FFFACD}
+\definecolor{LightRed}{HTML}{F7D9D9}
+\definecolor{Gray}{gray}{0.9}
+
+
+% Override here with the names
+\newcommand{\thetitle}{Creating and Extending a RISC-V Core with NTT Accelerator}
+\newcommand{\theturkishtitle}{NTT Hızlandırıcılı RISC-V Çekirdek Tasarımı}
+\newcommand{\theauthor}{Orhan Berkay Yılmaz}
+\newcommand{\thedate}{June 2025}
+\newcommand{\theturkishdate}{Haziran 2025}
+
+\usepackage{color}
+\definecolor{darkgreen}{RGB}{0, 128, ,0}
+\newcommand{\fixme}[1]{{\color{red}\bfseries\sffamily (FIXME: #1)}}
+\newcommand{\suggest}[1]{{\color{darkgreen}\bfseries\sffamily (SUGGESTION: #1)}}
+\newcommand{\ask}[1]{{\color{blue}\bfseries\sffamily (QUESTION: #1)}}
+
+\newcommand\Includegraphics{\expandafter\includegraphics\expandafter} 
+
+% Title, author and date info
+\title{\thetitle}
+\author{\theauthor}
+\date{\thedate}
+
+% Graphics for PDFTeX
+\usepackage{graphicx}
+
+\begin{document}
+\numberwithin{figure}{section}
+\numberwithin{table}{section}
+\numberwithin{lstlisting}{section}
+\shorthandoff{=}
+
+
+\begin{titlepage}
+    \bfseries % Make all text bold in this environment
+    \sffamily % Similarly select sans-serif font
+    \begin{center}
+        \LARGE{\textbf{ISTANBUL TECHNICAL UNIVERSITY \\ 
+               FACULTY OF COMPUTER AND INFORMATICS} } \\
+        \vspace{5.5cm}
+        \LARGE{\thetitle}  \\
+        \vspace{4cm}
+        \Large{Graduation Project Interim Report} \\
+        \vspace{0.5cm}
+        \Large{\theauthor} \\
+        \Large{150210054} \\
+        \vspace{4cm}
+        \large{Department: Computer Engineering} \\
+        \large{Division: Computer Engineering} \\
+        \vspace{1.5cm}
+        \large{Advisor: Assis. Prof. Dr. Ayşe Yılmazer Metin} \\
+        \vspace{\fill} % Fill out until the page end
+        \large{\normalfont \sffamily \thedate}
+    \end{center}
+\end{titlepage}
+
+\pagenumbering{Roman} % Capital roman numerals as page numbers
+\newpage
+\section*{Statement of Authenticity}
+I/we hereby declare that in this study
+\begin{enumerate}
+    \item all the content influenced from external references are cited clearly and in detail,
+    \item and all the remaining sections, especially the theoretical studies and implemented software/hardware that constitute the fundamental essence of this study is originated by my/our individual authenticity.
+\end{enumerate}
+\vspace{1em}
+İstanbul, \theturkishdate
+\vspace{3em}\\ \theauthor
+
+\newpage
+\section*{Acknowledgement}
+
+I would like to thank my advisor, Assist. Prof. Dr. Ayşe Yılmazer Metin, for her guidance, feedback, and continuous support throughout the course of this project. I also extend our gratitude to Istanbul Technical University for providing the resources and environment necessary to carry out this research.
+
+\newpage
+\section*{\centering\thetitle}
+\centerline{\fontsize{16pt}{21.6pt}\sffamily\bfseries (SUMMARY)}
+
+This project focuses on the research, design, implementation, and evaluation of a RISC-V-based processor core enhanced with a custom hardware extension for the Number Theoretic Transform (NTT). The project begins by developing a baseline RV32IMA core, which includes support for the base integer instruction set (RV32I), along with multiplication and atomic operations (M and A extensions). The goal of this phase is to create a fully functional and synthesizable RISC-V core that adheres to the standard RISC-V specification, enabling compatibility with widely used software toolchains, including compilers and debuggers. This core will be used as a base to develop on and also a performance baseline for the accelerator.
+
+The second and main phase of the project conducts a comprehensive literature review and introduces a custom hardware extension that accelerates the NTT. Number Theoretic Transform is widely used in performance-critical applications such as lattice-based post-quantum cryptography and Fully Homomorphic Encryption(FHE). In these domains, fast polynomial multiplication is a core operation, and software-based implementations often become a bottleneck due to their computational intensity. Our extension aims to reduce computational complexity and power consumption by mapping NTT computations directly into hardware. 
+
+The custom extension is integrated as a tightly coupled unit or coprocessor to the RV32IMA core, allowing specialized modular arithmetic operations to be executed through new instructions or memory-mapped registers. The hardware design is informed by existing literature on hardware NTT accelerators and tailored to balance performance, area, and energy efficiency on FPGA platforms.
+
+Validation of the system is conducted through detailed simulation and implementation on FPGA, where we measure performance gains over software-only approaches. These benchmarks include metrics such as execution time, cycle count, logic utilization, and energy estimation. Comparisons are made to demonstrate the real-world benefits of specialized hardware in cryptographic workloads.
+
+During the project, many new and already existing designs for NTT will be investigated. They will try to mapped into the same base and compared in several areas. Evaluation of designs will be used to find the optimal design for our platform. However, each design will be as parameterized as possible to leaving a door for the opportunity to test with different platforms.
+
+Through this work, we aim to show how domain-specific accelerators can significantly enhance the performance of cryptographic applications, particularly those involving modular arithmetic. By grounding our implementation in an extensive literature review, the project not only contributes a practical hardware design but also offers insights into the broader design space of extensible, application-specific processor accelerators.
+
+\newpage
+\section*{\centering\theturkishtitle}
+\centerline{\fontsize{16pt}{21.6pt}\sffamily\bfseries (ÖZET)}
+
+Bu proje, Sayı Kuramsal Dönüşüm (NTT) için özel bir donanım uzantısıyla geliştirilen RISC-V tabanlı bir işlemci çekirdeğinin araştırılması, tasarımı, uygulanması ve değerlen-dirilmesine odaklanmaktadır. Proje, temel tamsayı komut setini (RV32I), çarpma (M uzantısı) ve atomik işlemleri (A uzantısı) destekleyen bir RV32IMA çekirdeği geliştirerek başlamaktadır. Bu aşamadaki hedef, tam işlevsel ve sentezlenebilir bir RISC-V çekirdeği oluşturarak yaygın olarak kullanılan yazılım araç zincirleriyle —derleyiciler ve hata ayıklayıcılar dahil— uyumluluk sağlamaktır. Bu çekirdek, hem üzerine geliştirilecek temel yapı hem de hızlandırıcı için bir performans karşılaştırma noktası olacaktır.
+
+Projenin ikinci ve esas aşamasında ise kapsamlı bir literatür taraması gerçekleştirilir ve NTT’yi hızlandırmak için özel bir donanım uzantısı tanıtılır. Number Theoretic Transform, kafes tabanlı post-kuantum kriptografi ve Fully Homomorphic Encryption (FHE) gibi performans açısından kritik uygulamalarda yaygın şekilde kullanılmaktadır. Bu alanlarda hızlı polinom çarpımı temel bir işlemdir ve yazılım tabanlı uygulamalar genellikle hesaplama yoğunlukları nedeniyle darboğaz oluşturur. Önerilen uzantı, NTT hesaplamalarını doğrudan donanıma aktararak hesaplama karmaşıklığını ve güç tüketimini azaltmayı hedeflemektedir.
+
+Özel uzantı, RV32IMA çekirdeğine sıkı bir şekilde bağlı bir birim veya yardımcı işlemci olarak entegre edilir ve yeni komutlar veya bellek eşlemeli yazmaçlar aracılığıyla özel modüler aritmetik işlemler gerçekleştirilir. Donanım tasarımı, mevcut donanım tabanlı NTT hızlandırıcı literatüründen faydalanılarak gerçekleştirilir ve FPGA platformlarında performans, alan ve enerji verimliliği arasında bir denge sağlamak üzere özelleştirilir.
+
+Sistemin doğrulaması ayrıntılı simülasyonlar ve FPGA üzerindeki uygulama ile gerçek-leştirilir; burada yazılım tabanlı yaklaşımlara göre sağlanan performans kazançları ölçülür. Bu testler arasında yürütme süresi, çevrim sayısı, mantık kaynak kullanımı ve enerji tahmini gibi metrikler yer alır. Özel donanımın kriptografik iş yüklerinde sağladığı gerçek dünya avantajları yapılan karşılaştırmalarla gösterilir.
+
+Proje süresince, birçok yeni ve mevcut NTT tasarımı araştırılacaktır. Bu tasarımlar aynı temel yapıya eşlenmeye çalışılacak ve çeşitli alanlarda karşılaştırılacaktır. Tasarlım-ların değerlendirilmesi, platformumuz için en uygun tasarımın bulunmasında kullanıla-caktır. Bununla birlikte, her tasarım mümkün olduğunca parametreleştirilmiş olacak ve farklı platformlarda test etme olanağına açık bırakılacaktır.
+
+Bu çalışma aracılığıyla, alana özgü hızlandırıcıların özellikle modüler aritmetik içeren kriptografik uygulamaların performansını nasıl önemli ölçüde artırabileceği gösterilmek istenmektedir. Geniş bir literatür taramasına dayandırılan uygulamamız sayesinde proje, yalnızca pratik bir donanım tasarımı sunmakla kalmayıp, aynı zamanda genişleti-lebilir ve uygulamaya özel işlemci hızlandırıcıları tasarımı konusundaki daha genel tasarım alanına da katkı sağlamayı amaçlamaktadır.
+
+\newpage
+\tableofcontents
+\newpage
+
+% For the ones who doesn't know: 1,2,..9 called West Arabic numbers
+\pagenumbering{arabic}
+\section{Introduction and Problem Definition}
+
+In recent years, the increasing complexity of cryptographic algorithms and signal processing workloads has pushed the boundaries of what general-purpose processors can handle efficiently. Applications such as post-quantum cryptography and Fully Homomorphic Encryption (FHE) rely heavily on computationally intensive operations—particularly modular arithmetic and polynomial multiplication. These operations, when executed in software on conventional CPU architectures, result in high latency and energy consumption, making them unsuitable for performance- and power-sensitive applications such as embedded systems, IoT devices, or real-time cryptographic services.
+
+To address this problem, the use of hardware accelerators has emerged as a promising solution. Hardware accelerators are specialized processing units designed to perform specific tasks much faster and more efficiently than general-purpose CPUs. By offloading heavy computations to dedicated hardware, systems can achieve significant improvements in both performance and power consumption. In the context of cryptography and signal processing, the Number Theoretic Transform (NTT) has become one of the most important operations that benefits from such hardware acceleration. NTT is the modular arithmetic analog of the Fast Fourier Transform (FFT) and is particularly vital in lattice-based cryptographic algorithms and FHE schemes, which are considered among the strongest candidates for post-quantum secure communication.
+
+In parallel, the open and extensible nature of the RISC-V instruction set architecture (ISA) has opened up new possibilities for domain-specific hardware design. Unlike proprietary ISAs, RISC-V is freely available and designed from the ground up to be customizable, making it an ideal foundation for research and development in processor extensions and hardware-software co-design. The RISC-V ecosystem supports a wide range of toolchains, simulators, and open-source cores, allowing for the rapid development and integration of application-specific functionality.
+
+This project proposes the development of a RISC-V based system that addresses the computational inefficiencies of modular arithmetic by integrating a custom hardware accelerator for NTT. The system consists of two main components:
+
+\begin{itemize}
+    \item  A baseline RV32IMA RISC-V processor core, fully compatible with standard toolchains and capable of executing regular C and assembly programs.
+    \item A tightly-coupled NTT hardware extension, designed to accelerate forward and inverse NTT operations for polynomial multiplication tasks.
+\end{itemize}
+
+An important reason for developing the processor core from scratch is to provide a clean and modular testbench that can be fully controlled and understood. This also facilitates easy integration, debugging, and comparison with other existing RISC-V cores and hardware extension designs. By having a self-contained baseline implementation, the evaluation of the NTT extension becomes more transparent and reproducible.
+
+The project begins with the implementation and verification of the RV32IMA core, ensuring correctness and compliance with the RISC-V specification. Following this, the custom NTT extension is designed and attached to the core using either custom instructions or a memory-mapped I/O interface. This allows cryptographic algorithms that rely on NTT to offload the most demanding parts of their computation to the specialized hardware, achieving better performance and energy efficiency compared to software-only implementations.
+
+A key part of the project is also the literature review of current solutions, including state-of-the-art hardware accelerators for NTT, existing RISC-V extensions, and how similar systems approach the integration of domain-specific processing units. This background study helps in identifying common design trade-offs and guides the architectural choices made during implementation.
+
+The proposed system will be validated through both simulation and FPGA deployment, with a focus on measuring speedup, logic resource utilization, and energy efficiency. By comparing the performance of software-only and hardware-accelerated NTT implementations, the project aims to quantify the real-world benefits of domain-specific hardware within an open, extensible RISC-V environment.
+
+In summary, this project addresses the challenge of inefficient modular arithmetic in modern cryptographic and signal processing applications by leveraging the openness of RISC-V and the efficiency of custom accelerators. Through the implementation of a dedicated NTT hardware unit and its integration with a RISC-V processor core, the system demonstrates how tailored architectures can bring tangible benefits to high-demand computational domains like lattice-based cryptography and FHE.
+
+\newpage
+
+\section{Literature Survey}
+We investigated the academic literature related to the acceleration of the Number Theoretic Transform (NTT), which is the cornerstone of our proposed hardware extension. The performance of lattice-based cryptography, a leading candidate for the post-quantum era, is critically dependent on the efficiency of polynomial multiplication. The NTT, an integer-based variant of the Fast Fourier Transform (FFT), has emerged as the de-facto standard for this task, reducing the computational complexity from $\mathcal{O}(n^2)$ to a more manageable $\mathcal{O}(n \log n)$ \cite{Satriawan2023Conceptual}. 
+
+The following chapters contain an explanation of the surveyed papers and how each affected the design approach. Our project, which focuses on creating a specialized hardware accelerator for NTT on a RISC-V platform, builds upon a rich body of work dedicated to optimizing this transform both algorithmically and architecturally. There were many papers focusing on one of these approaches, however, there were also some that takes a wholistic approach.
+
+\subsection{Algorithmic Optimizations for NTT}
+The foundational algorithms for fast NTT computation are adaptations of the Cooley-Tukey and Gentleman-Sande butterfly structures from FFT \cite{Satriawan2024Beginner}. However, naively implementing these can be inefficient. A significant body of research has focused on algorithmic refinements to reduce overhead. A key optimization involves merging the pre- and post-processing steps required for negacyclic convolution—the specific type of polynomial multiplication used in rings like $\mathbb{Z}_q[x]/(x^n+1)$—directly into the NTT/INTT algorithms. This technique, explored in works like \cite{Roy2014Compact, Liu2024Area}, avoids separate, cycle-consuming passes over the data. Our design will incorporate this merged approach to streamline the computation pipeline.
+
+Another critical aspect of hardware implementation is efficient modular arithmetic. While general-purpose methods like Barrett or Montgomery reduction are effective, specialized techniques offer superior performance for the specific prime moduli used in NTT-based cryptography. A notable contribution by Longa and Naehrig is the development of a specialized modular reduction, termed k-RED, for primes of the form $q = k \cdot 2^m + 1$ \cite{Longa2016Speeding}. This method minimizes costly multiplications, which is highly advantageous for hardware implementation. Our preliminary design will evaluate the trade-offs of implementing a similar specialized reduction unit versus more general-purpose modular multipliers, aiming to find the optimal balance for area and speed on our target FPGA platform.
+
+Furthermore, traditional FFT-style algorithms often require a bit-reversal permutation of the data, which can introduce significant latency and complex wiring in a hardware implementation. More recent architectural proposals have focused on Constant-Geometry (CG) algorithms, which maintain a consistent memory access pattern across all stages, and have successfully eliminated the bit-reversal step entirely \cite{Liu2024Area, Malal2023Designing}. Our project adopts this strategy, as a conflict-free and simple memory access scheme is paramount for creating a scalable and parameterized accelerator that can efficiently utilize a variable number of processing elements.
+
+\subsection{Hardware Architectures for NTT Acceleration}
+The design space for NTT hardware accelerators involves a fundamental trade-off between throughput and resource utilization. At one end of the spectrum, massively parallel architectures are designed for maximum performance. For instance, Roy et al. present a high-performance parallel architecture for homomorphic computing that leverages a large number of processing elements to minimize latency \cite{Roy2019FPGA}. While demonstrating the peak performance achievable, such designs can be resource-intensive. In contrast, pipelined architectures such as PipeNTT by Ye et al. focus on resource efficiency by processing data in a streaming fashion, making them suitable for area-constrained environments like IoT endpoints \cite{Ye2022PipeNTT}. Our project aims to navigate this trade-off by developing a configurable architecture. The number of parallel butterfly units will be a key parameter, allowing the design to be synthesized for different points in the area-time continuum, from a compact, single-pipeline implementation to a high-throughput, multi-core configuration.
+
+A central theme in recent literature is the development of flexible and configurable NTT accelerators. The work by Liu et al. introduces a conflict-free and configurable architecture that can adapt to various parameter settings while maintaining a low Area-Time Product (ATP) \cite{Liu2024Area}. Similarly, Malal proposes a design with run-time configurable butterfly units that can be repurposed for forward NTT, inverse NTT, and pointwise multiplication, offering a flexible balance between BRAM and DSP usage \cite{Malal2023Designing}. These works directly inform our goal of creating a highly parameterized accelerator. We will extend these concepts by developing a novel, conflict-free memory controller that allows our RISC-V core to dynamically manage a scalable number of NTT processing elements.
+
+Memory usage is a critical constraint on FPGAs. To this end, Kim et al. propose a hardware architecture that generates roots of unity (twiddle factors) on-the-fly, significantly reducing the BRAM storage required compared to storing all pre-computed factors \cite{Kim2020Hardware}. This is particularly important for supporting bootstrappable homomorphic encryption schemes, which require very large parameter sets. Our design will investigate this on-the-fly generation technique as a strategy to minimize BRAM footprint, making the accelerator more efficient and adaptable to different cryptographic schemes and security levels. The integration of such accelerators as a co-processor is a common design pattern. While our project specifically targets a RISC-V core, the principle of offloading the computationally intensive NTT to a dedicated hardware unit, as demonstrated in works like \cite{Li2021High, Kim2020Hardware, Roy2019FPGA}, is a well-established method for accelerating cryptographic workloads. Our contribution will be the tight coupling of the accelerator with the RISC-V instruction set, enabling efficient execution through custom instructions or memory-mapped control registers, and a thorough evaluation of the performance gains over a purely software-based approach on the same RISC-V core.
+
+
+\section{Novel Aspects and Technological Contributions}
+
+\begin{comment}
+In this section you should briefly summarize the technical contributions in an itemized manner. Your contributions are the novel aspects of your project: what are you implementing in your project that is 
+\begin{itemize}
+\item not present in the literature or 
+\item not implemented as you will implement or 
+\item not performing as good as your final implementation does 
+\end{itemize}
+\end{comment}
+
+While NTT accelerators and RISC-V extensions have been studied in the literature, this project aims to make the following modest but meaningful technical contributions:
+
+\begin{itemize}
+  \item A lightweight and modular RV32IMA core designed specifically for integration and testing of domain-specific hardware accelerators.
+  \item A compact NTT hardware unit tailored for integration with a 32-bit RISC-V core, focusing on low resource usage and ease of simulation.
+  \item A reproducible test environment for comparing software-only and hardware-accelerated NTT execution under the same architecture, facilitating fair performance benchmarking.
+  \item A performance evaluation that demonstrates practical speedup and energy savings on a small-scale FPGA, aimed at proving feasibility rather than achieving record-breaking throughput.
+  \item A comprehensive investigation of many different designs in the literature.
+\end{itemize}
+
+While the individual components may not be entirely novel in isolation, the combination of simplicity, reproducibility, investigation, and full-stack integration in an educational/academic setting constitutes a meaningful contribution.
+
+\newpage
+
+\section{System Requirements} \label{sec:sysreq}
+
+The system is designed to implement a baseline RV32IMA RISC-V processor core along with a custom extension for Number Theoretic Transform (NTT) acceleration.
+
+\subsection{Functional Requirements}
+
+The key functional requirements for this project are as follows:
+
+\begin{itemize}
+    \item The system shall implement a compliant RV32IMA core capable of executing basic RISC-V programs.
+    \item The system shall support standard RISC-V toolchains (e.g., GCC, LLVM) for compiling and running test programs.
+    \item The system shall provide a custom instruction interface or memory-mapped control interface to invoke NTT operations.
+    \item The system shall perform NTT and inverse NTT operations using hardware acceleration.
+    \item The system shall be easily simulated using testbenchs.
+    \item The system shall support execution of NTT-accelerated programs.
+    \item The system shall be implementable on a target FPGA platform (Tang Nano 20K).
+    \item The system shall allow comparison of execution performance between software-only and hardware-accelerated NTT.
+\end{itemize}
+
+\subsection{Non-Functional Requirements}
+
+The key non-functional requirements for this project are as follows:
+
+\begin{itemize}
+    \item The system should be modular and maintainable, allowing future extensions (e.g., support for more cryptographic primitives).
+    \item The system should demonstrate a performance gain of at least 4× over software-based NTT in terms of execution time.
+    \item The system should be resource-efficient and fit within the constraints of a entry-level FPGA.
+    \item The design should prioritize clarity and simplicity to ease verification and testing.
+    \item The system should follow open-source standards and be compatible with SystemVerilog toolchains.
+    \item The system should investigate many different novel approaches.
+\end{itemize}
+
+\subsection{Use Cases}
+
+\begin{itemize}
+    \item \textbf{Use Case 1:} A \textit{hardware designer} can use simulation tools to build and verify the correctness of the baseline RV32IMA RISC-V core and easily modify for any use case.
+    \item \textbf{Use Case 2:} A \textit{developer} can compile and run RISC-V programs using standard toolchains on the implemented core.
+    \item \textbf{Use Case 3:} A \textit{cryptography researcher} can execute hardware-accelerated NTT operations through custom instructions or control interfaces.
+    \item \textbf{Use Case 4:} A \textit{researcher} can simulate the integrated system to compare many approaches to NTT accelerators.
+    \item \textbf{Use Case 5:} A \textit{hardware engineer} can synthesize and deploy the design onto an FPGA to evaluate its real-world behavior and resource usage.
+    \item \textbf{Use Case 6:} A \textit{student} can examine the modular design and codebase so that I can understand and potentially reuse parts of the system in other RISC-V extension projects. 
+\end{itemize}
+
+\newpage
+\section{Project Plan}
+\subsection{Resource Requirements}
+
+The development and testing of the system will rely entirely on open-source tools and accessible hardware. The following resources will be used throughout the project:
+
+\begin{itemize}
+  \item \textbf{Personal Development Laptop:} A Linux-based laptop with at least 8 GB RAM and a modern multi-core CPU will be used for simulation, synthesis, and toolchain compilation.
+  
+  \item \textbf{Simulation Environment – Verilator:}  
+  Verilator is an open-source, cycle-accurate Verilog simulator used to verify the functionality of the RISC-V core and the NTT extension at RTL level. It compiles Verilog into C++ and enables fast and scriptable simulations.  
+  % https://www.veripool.org/verilator/
+  
+  \item \textbf{Synthesis and Place \& Route – Yosys and nextpnr:}  
+  \begin{itemize}
+    \item \textbf{Yosys:} An open-source logic synthesis framework used to convert Verilog HDL into a gate-level netlist for supported FPGA architectures.  
+    % https://yosyshq.net/yosys/
+    \item \textbf{nextpnr:} An open-source place-and-route tool used with Yosys to map synthesized designs to physical FPGA resources, such as LUTs and routing fabric.  
+    % https://github.com/YosysHQ/nextpnr
+  \end{itemize}
+  
+  \item \textbf{FPGA Board – Tang Nano 20K:}  
+  A low-cost FPGA development board featuring the Gowin GW2AR-18 FPGA. It supports open-source toolchains (via Project Trellis) and provides enough LUTs and BRAM to host the RV32IMA core and the NTT unit.  
+  % https://www.sipeed.com/Tang-Nano-20K.html
+  
+  \item \textbf{Toolchain – RISC-V GCC and Spike Simulator:}  
+  The standard RISC-V GNU toolchain will be used to compile C and assembly programs targeting RV32IMA. Spike, the official ISA simulator, may be used during early-stage software testing.  
+  % https://github.com/riscv-collab/riscv-gnu-toolchain
+  % https://github.com/riscv-software-src/riscv-isa-sim
+  
+  \item \textbf{Code Repository and Version Control – Git:}  
+  Git will be used to maintain version control, collaborate across machines, and manage experimental changes throughout the development process.
+  
+\end{itemize}
+
+All tools and platforms listed above are open source or freely available for academic use, making the development workflow fully reproducible and cost-effective.
+
+
+\newpage
+\subsection{Work Breakdown and Work Assignment}
+
+\begin{comment}
+If a team project is your case a brief effort estimation can be useful. Even for individual project you should present a Work Breakdown Structure where you enlist main tasks(can be linked with the features enlisted in Section \ref{sec:sysreq}) and subtasks that build the main task in a tree format. An additional PERT chart and critical path analysis shall be good. If a team project is your case you should present which tasks in your work breakdown structure is assigned to each member of your team. If you are an individual obviously you don't need work assignment.
+\end{comment}
+
+Since this is an individual project, there is no work breakdown but here is the tasks and their descriptions. The timetable can be seen in next section with GANTT diagram:
+
+\begin{itemize}
+    \item \textbf{Literature Review and Conceptual Design}: This phase involves studying existing NTT algorithms and hardware architectures, understanding mathematical principles, and identifying suitable techniques for integration with a RISC-V pipeline.
+
+    \item \textbf{Baseline Core Development}: An RV32IMA-compliant processor is developed, supporting integer, multiplication, and atomic operations. It should also support pipelining since many designs use pipelining. The baseline serves as the foundation for integrating the NTT unit.
+
+    \item \textbf{Design of the Accelerator}: The architectural design of the NTT extension unit is drafted, including functional blocks, operand flow, control logic, and instruction interface with the RV32IMA core.
+
+    \item \textbf{NTT Creation and Integration}: The core components of the Number Theoretic Transform are implemented in SystemVerilog. This includes butterfly units, twiddle factor ROMs, and modular arithmetic blocks. Then, Custom RISC-V instructions for initiating NTT operations are added, and control signals are handled.
+
+    \item \textbf{Code Documentation}: Source code is cleaned, organized, and annotated with comments to ensure maintainability and clarity for future reference or reuse.
+
+    \item \textbf{Final Integration}: All modules, including accelerator, core, and interface logic, are finalized and synthesized into a cohesive hardware unit. Final design files are prepared.
+
+    \item \textbf{Final Testing}: Comprehensive testing is conducted on simulation or FPGA platforms to validate timing, correctness, and performance. This concludes the verification of the entire project.
+    
+    \item \textbf{Report Writing}: Interim and final reports are written, detailing design choices, implementation steps, and analysis. This includes formal documentation required for project evaluation.
+\end{itemize}
+
+
+\newpage
+\subsection{Time Plan}
+\begin{comment}
+Present a GANTT diagram based on the tasks in the subsection. You don't need to be very detailed, just the main tasks and an additional level of subtasks shall be fine. 
+Until now you should've already need to include a figure in your report. Below is an example:
+This is the best graduation project ever. In Figure \ref{fig:ganttdiagram} you can see the Gantt diagram of the project.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{gantt_diagram}
+    \caption{The Gantt diagram of the project}
+    \label{fig:ganttdiagram}
+\end{figure}
+\end{comment}
+
+\renewcommand{\arraystretch}{1.5}
+\setlength\LTleft{-1.5cm}
+\begin{longtable}{|p{5cm}|*{10}{>{\arraybackslash}p{0.8cm}|}}
+\hline
+\rowcolor{Gray}
+\textbf{Task} & \textbf{Mar} & \textbf{Apr} & \textbf{May} & \textbf{Jun} & \textbf{Jul} & \textbf{Aug} & \textbf{Sep} & \textbf{Oct} & \textbf{Dec} & \textbf{Jan} \\
+\hline
+Literature Review & \cellcolor{LightBlue} & \cellcolor{LightBlue} & \cellcolor{LightBlue} & \cellcolor{LightBlue} & & & & & & \\
+\hline
+Baseline Core Development & \cellcolor{LightYellow} & \cellcolor{LightYellow} & \cellcolor{LightYellow} & & & & & & & \\
+\hline
+Design of Accelerator & & & & \cellcolor{LightGreen} & \cellcolor{LightGreen} & & & & & \\
+\hline
+NTT Creation & & & & & & \cellcolor{LightBlue} & \cellcolor{LightBlue} & & & \\
+\hline
+Finalizing & & & & & & & & \cellcolor{LightGreen} & \cellcolor{LightGreen} & \\
+\hline
+Report Writing &  &  &  & \cellcolor{Gray} &  &  &  &  & & \cellcolor{Gray} \\
+\hline
+Analysis & & & & & & & & & & \cellcolor{LightBlue} \\
+\hline
+\end{longtable}
+
+
+%\newpage
+\section{Goals and Evaluation Criteria}
+
+\begin{comment}
+In this section you should enlist your goals at the end of your project, do you plan to implement a whole system or improve just a part, will you be implementing an algorithm, software, software/hardware system, hardware design? 
+Afterwards you should enlist roughly the criteria which you will be evaluating the system at the end of the project. Briefly you should give \emph{numerical values} for the most important non-functional aspects of your project. For instance 
+\begin{enumerate}
+\item System should support RV32IMA ISA with pipelining
+\item System throughput should not be less than 1000 operations per second
+\item Latency should be improved at least 10\% compared to xyz technique
+\item 10-fold cross validation on abc dataset shuld provide 0.95 precision and 0.8 recall
+\end{enumerate}
+At the end of the project even though your performance as a student will not be evaluated based on your how well you meet the targets listed in this section you are expected to examine in your final report your system's performance based on the numbers you list above.
+\end{comment}
+% -----------------------------------------------------------------------
+
+This project consists of several ambitious parts. It starts from the design of the core and goes until end-user performance. It will try to stick to conventional toolchains and compilers. The main focus is creating a sandbox to try different designs and compare them. The creation of new methods is not the aim.  
+
+\begin{enumerate}
+  \item The NTT accelerator should achieve at least \textbf{4$\times$ speedup} compared to a software-only NTT implementation on the same RISC-V core.
+  \item Should be configured to support \textbf{1024, 2048 and 4096-point} NTT.
+  \item The system should operate at a minimum of \textbf{25 MHz} on an Tang Nano 20K FPGA with the complete core, pipelining and NTT unit.
+  \item The hardware design should fit within \textbf{20,000 LUTs}.
+\end{enumerate}
+
+\newpage
+\bibliographystyle{IEEEtran}
+\bibliography{references.bib} 
+
+\end{document}
+
+% TODO: add sources to the summary
+% TODO: add licence to project. MIT prob veya CC0
+%  This section introduces the term project by summarizing the main characteristics of the system to be implemented. Student may include very rough technical details but rather the main problem and how the designed system is planned to remedy the problem is to be defined in this section. This section is expected not to exceed two or three pages.

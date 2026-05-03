@@ -149,7 +149,7 @@ def main():
         default=DEFAULT_PSI,
         help=f"Primitive root (default: {DEFAULT_PSI})",
     )
-    parser.add_argument("--width", type=int, default=32, help="Bit width (default: 32)")
+    parser.add_argument("--width", type=int, default=24, help="Bit width (default: 24)")
     parser.add_argument(
         "--output-dir",
         type=str,

@@ -2,7 +2,7 @@
 
 module mod_mult #(
     parameter WIDTH           = 32,
-    parameter Q               = 8380417,
+    parameter [WIDTH-1:0] Q = 8380417,
     parameter REDUCTION_TYPE  = 0,
     parameter PIPELINE_STAGES = 0,
     parameter K_BARRETT       = 23,

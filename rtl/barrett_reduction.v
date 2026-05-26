@@ -2,7 +2,7 @@
 
 module barrett_reduction #(
     parameter WIDTH         = 32,
-    parameter Q             = 8380417,
+    parameter [WIDTH-1:0] Q = 8380417,
     parameter K             = 23,
     parameter MU            = 8396807,
     parameter PRODUCT_WIDTH = 64
@@ -16,15 +16,15 @@ module barrett_reduction #(
   wire [PRODUCT_WIDTH-1:0]   q1;
   wire [Q2_WIDTH-1:0]        q2_temp;
   wire [Q2_WIDTH-1:0]        q2_shifted;
-  wire [31:0]                q2;
-  wire [PRODUCT_WIDTH+31:0]  r_temp;
+  wire [WIDTH-1:0]           q2;
+  wire [PRODUCT_WIDTH+WIDTH-1:0] r_temp;
   wire [WIDTH-1:0]           r;
 
   assign q1        = product >> (K - 1);
   assign q2_temp   = q1 * MU;
   assign q2_shifted = q2_temp >> (K + 1);
-  assign q2        = q2_shifted[31:0];
-  assign r_temp    = {{32{1'b0}}, product} - (q2 * Q);
+  assign q2        = q2_shifted[WIDTH-1:0];
+  assign r_temp    = {{WIDTH{1'b0}}, product} - (q2 * Q);
   assign r         = r_temp[WIDTH-1:0];
   assign result    = (r >= Q) ? (r - Q) : r;
 

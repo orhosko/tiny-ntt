@@ -2,7 +2,7 @@
 
 module ntt_butterfly_inverse #(
     parameter WIDTH          = 32,
-    parameter Q              = 8380417,
+    parameter [WIDTH-1:0] Q = 8380417,
     parameter REDUCTION_TYPE = 0,
     parameter MULT_PIPELINE  = 4
 ) (

@@ -2,8 +2,8 @@
 
 module ntt_twiddle_table #(
     parameter WIDTH          = 32,
-    parameter Q              = 8380417,
-    parameter PSI            = 283817,
+    parameter [WIDTH-1:0] Q = 8380417,
+    parameter [WIDTH-1:0] PSI = 283817,
     parameter ADDR_WIDTH     = 12,
     parameter TWIDDLE_DEPTH  = 4096,
     parameter REDUCTION_TYPE = 0,

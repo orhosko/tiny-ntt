@@ -2,7 +2,7 @@
 
 module mod_add #(
     parameter WIDTH = 32,
-    parameter Q     = 8380417
+    parameter [WIDTH-1:0] Q = 8380417
 ) (
     input  wire [WIDTH-1:0] a,
     input  wire [WIDTH-1:0] b,
@@ -12,6 +12,6 @@ module mod_add #(
   wire [WIDTH:0] sum;
 
   assign sum    = {1'b0, a} + {1'b0, b};
-  assign result = (sum >= Q) ? (sum - Q) : sum[WIDTH-1:0];
+  assign result = (sum >= {1'b0, Q}) ? (sum - {1'b0, Q}) : sum[WIDTH-1:0];
 
 endmodule

@@ -14,16 +14,16 @@
 
 module ntt_poly_mult #(
     parameter int N                = 4096,
-    parameter int WIDTH            = 24,
-    parameter int Q                = 8380417,
+    parameter int WIDTH            = 60,
+    parameter [WIDTH-1:0] Q        = 60'd1152921504606830593,
     parameter int ADDR_WIDTH       = $clog2(N),
     parameter int REDUCTION_TYPE   = 1,
     parameter int PARALLEL         = 8,
-    parameter int PSI              = 283817,
-    parameter int PSI_INV          = 7893065,
-    parameter int N_INV            = 8378371,
-    parameter     FWD_TWIDDLE_FILE = "twiddle_forward_4096.hex",
-    parameter     INV_TWIDDLE_FILE = "twiddle_inverse_4096.hex",
+    parameter [WIDTH-1:0] PSI     = 60'd431606828070683274,
+    parameter [WIDTH-1:0] PSI_INV = 60'd164227591873870967,
+    parameter [WIDTH-1:0] N_INV   = 60'd1152640029630119941,
+    parameter     FWD_TWIDDLE_FILE = "twiddle_forward_4096_60bit.hex",
+    parameter     INV_TWIDDLE_FILE = "twiddle_inverse_4096_60bit.hex",
     parameter bit POINTWISE_PARALLEL = 1'b0,
     parameter int MULT_PIPELINE    = 4
 ) (

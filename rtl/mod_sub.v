@@ -2,7 +2,7 @@
 
 module mod_sub #(
     parameter WIDTH = 32,
-    parameter Q     = 8380417
+    parameter [WIDTH-1:0] Q = 8380417
 ) (
     input  wire [WIDTH-1:0] a,
     input  wire [WIDTH-1:0] b,

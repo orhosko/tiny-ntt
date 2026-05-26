@@ -3,8 +3,8 @@
 module ntt_forward #(
     parameter N              = 4096,
     parameter WIDTH          = 32,
-    parameter Q              = 8380417,
-    parameter PSI            = 283817,
+    parameter [WIDTH-1:0] Q = 8380417,
+    parameter [WIDTH-1:0] PSI = 283817,
     parameter ADDR_WIDTH     = $clog2(N),
     parameter REDUCTION_TYPE = 0,
     parameter PARALLEL       = 8,

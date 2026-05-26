@@ -2,7 +2,7 @@
 
 module montgomery_reduction #(
     parameter WIDTH         = 32,
-    parameter Q             = 8380417,
+    parameter [WIDTH-1:0] Q = 8380417,
     parameter K             = 23,
     parameter Q_PRIME       = 8380415,
     parameter PRODUCT_WIDTH = 64

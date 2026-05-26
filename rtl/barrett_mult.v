@@ -2,7 +2,7 @@
 
 module barrett_mult #(
     parameter WIDTH           = 32,
-    parameter Q               = 8380417,
+    parameter [WIDTH-1:0] Q = 8380417,
     parameter PIPELINE_STAGES = 0,
     parameter K               = 23,
     parameter MU              = 8396807
@@ -33,7 +33,7 @@ module barrett_mult #(
       .result (result_comb)
   );
 
-  function automatic [31:0] q2_estimate;
+  function automatic [WIDTH-1:0] q2_estimate;
     input [2*MOD_WIDTH-1:0] product_value;
     reg [2*MOD_WIDTH-1:0] q1_value;
     reg [Q2_WIDTH-1:0] q2_temp_value;
@@ -42,18 +42,18 @@ module barrett_mult #(
       q1_value = product_value >> (K - 1);
       q2_temp_value = q1_value * MU;
       q2_shifted_value = q2_temp_value >> (K + 1);
-      q2_estimate = q2_shifted_value[31:0];
+      q2_estimate = q2_shifted_value[WIDTH-1:0];
     end
   endfunction
 
   function automatic [WIDTH-1:0] finalize;
     input [2*MOD_WIDTH-1:0] product_value;
-    input [31:0] q2_value;
-    reg [2*MOD_WIDTH+31:0] r_temp_value;
-    reg [31:0] r_value;
+    input [WIDTH-1:0] q2_value;
+    reg [2*MOD_WIDTH+WIDTH-1:0] r_temp_value;
+    reg [WIDTH-1:0] r_value;
     begin
-      r_temp_value = {{32{1'b0}}, product_value} - (q2_value * Q);
-      r_value = r_temp_value[31:0];
+      r_temp_value = {{WIDTH{1'b0}}, product_value} - (q2_value * Q);
+      r_value = r_temp_value[WIDTH-1:0];
       if (r_value >= Q)
         finalize = r_value - Q;
       else
@@ -86,10 +86,10 @@ module barrett_mult #(
       reg [2*MOD_WIDTH-1:0] mult_stage1_reg;
       reg [2*MOD_WIDTH-1:0] mult_stage2_reg;
       reg [2*MOD_WIDTH-1:0] product_reg;
-      reg [31:0] q2_reg;
+      reg [WIDTH-1:0] q2_reg;
       reg [WIDTH-1:0] result_reg;
 
-      wire [31:0] q2_comb = q2_estimate(mult_stage2_reg);
+      wire [WIDTH-1:0] q2_comb = q2_estimate(mult_stage2_reg);
       wire [WIDTH-1:0] result_pipe_comb = finalize(product_reg, q2_reg);
 
       always @(posedge clk) begin

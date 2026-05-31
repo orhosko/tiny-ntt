@@ -104,9 +104,10 @@
 
 % Listings for implemented code
 \usepackage{listings}
-\lstset{basicstyle=\ttfamily,frame=lines,tabsize=4}
+\lstset{basicstyle=\scriptsize\ttfamily,frame=lines,tabsize=4}
 \renewcommand{\lstlistingname}{Listing}
 \lstset{
+    basicstyle=\scriptsize\ttfamily,
     breakatwhitespace=false,
     breaklines=true,
     captionpos=b,
@@ -336,23 +337,6 @@ that test, the processor behaved like a simple echo machine, which provided a
 practical check that compiled software, MMIO access, and external communication
 were working together.
 
-\begin{lstlisting}[language=C,caption={Bare-metal UART echo test used for the custom RISC-V core},label={lst:uart-echo-test}]
-int main(void)
-{
-    uart_write_str("Hello\r\n");
-
-    while (1) {
-        uart_write_str("Please enter something:\r\n");
-        uart_read_str(buf, sizeof(buf));
-        uart_write_str("You said: ");
-        uart_write_str(buf);
-        uart_write_str("\r\n");
-    }
-
-    return 0;
-}
-\end{lstlisting}
-
 The main hardware block developed in the project is a synthesizable RTL accelerator for NTT-based negacyclic polynomial multiplication. The accelerator was tested with multiple parameter sets, including \(N=256\) with 24-bit modulus width, \(N=4096\) with 24-bit modulus width, and \(N=4096\) with 60-bit modulus width. The target operation corresponds to negative-wrapped convolution (NWC) modulo \(x^N+1\), which is the convolution form used by many FHE schemes.
 
 The accelerator is organized as a set of separate RTL units around transform execution, transform-domain multiplication, coefficient storage, twiddle access, butterfly arithmetic, and modular reduction. These clear module boundaries are not always the most latency-optimal organization, because they can introduce explicit movement or buffering between stages. However, they made the design easier to verify, synthesize, and analyze. They also make the implementation more portable across targets; for example, a coefficient memory implemented with FPGA BRAM can later be replaced by SRAM macros in an ASIC-oriented flow without rewriting the complete NTT datapath.
@@ -578,37 +562,24 @@ logic to every twiddle access lane and make the multiport BRAM path less
 regular. The current design chooses separate forward and inverse twiddle
 memories to keep the NTT and INTT access paths simple and timing-friendly.
 
-Twiddle addressing also changed during development. An earlier ROM-generation
-direction stored twiddles in a stage/block-oriented order where the ROM entry
-already contained a bit-reversed exponent:
+The twiddle-factor literature also made the ROM layout itself important. During
+development, one stage/block-oriented convention stored each twiddle using a
+bit-reversed exponent:
 \[
     \mathrm{ROM}_{\mathrm{old}}[t+k] = \psi^{\mathrm{brv}(t+k)} .
 \]
-Here, \(\mathrm{brv}(\cdot)\) denotes bit reversal of the index, \(t\) denotes
-the stage-dependent block offset, and \(k\) denotes the block position inside
-that stage. The later RTL address generator uses a simpler direct-exponent
-convention:
+The final RTL instead uses a direct exponent-indexed convention:
 \[
     \mathrm{addr} = \mathrm{position}\cdot 2^{\log_2 N-s},
     \qquad
     \mathrm{ROM}_{\mathrm{current}}[\mathrm{addr}] = \psi^{\mathrm{addr}} .
 \]
-This means the ROM address is treated as the exponent itself. Mixing the old ROM
-layout with the newer address generator gives incorrect non-trivial transforms,
-even if simple zero or impulse-like tests still pass. For this reason, the
-twiddle files used by the final RTL were regenerated to match the direct
-exponent-address convention.
-
-This twiddle change was tied to the address scheduler. Early experiments mixed
-stage/block-ordered twiddle tables with address formulas derived from butterfly
-group or position indices. The final RTL uses a constant-geometry coefficient
-schedule and direct exponent-indexed twiddle files, so the controller-generated
-address selects the intended power of the root without an additional table
-permutation. After this convention was fixed, the coefficient memory was
-organized as a banked structure so that multiple butterfly lanes can read and
-write coefficient pairs in parallel. Thus, twiddle addressing and coefficient
-banking were treated together: the transform is correct only when the ROM
-layout, stage schedule, and memory-bank geometry agree.
+This change is a useful implementation lesson: the ROM-generation script,
+address scheduler, and coefficient-bank geometry must agree on the same
+exponent convention. Otherwise, simple tests may still pass while non-trivial
+vectors fail. The final design therefore treats twiddle addressing and
+coefficient banking as one scheduling problem rather than as independent
+storage choices.
 
 \subsection{Modular Multiplication Hardware}
 
@@ -679,15 +650,15 @@ shared FFT/NTT architecture where resources are partially reused
 they show why configurability and clean integration are useful beyond a single
 standalone transform.
 
-The current project sits between compact educational RTL and these larger
-accelerator systems. It is more complete than an algorithmic model because it
-includes synthesizable RTL, testbenches, FPGA-oriented timing experiments, and a
-top-level polynomial multiplication sequence. It is not yet as optimized as the
-best conflict-free, fully parallel, or streaming architectures. The surveyed
-work makes the remaining direction clear: improve memory movement and
-inter-stage bandwidth while keeping the modular structure that made the design
-testable and portable across FPGA, processor-integration, and ASIC-oriented
-flows.
+The current project occupies an intermediate point between small educational RTL
+designs and full application-level HE accelerators. It is more complete than an
+algorithmic model because it includes synthesizable RTL, testbenches,
+FPGA-oriented timing experiments, and a top-level polynomial multiplication
+sequence. It is not yet as optimized as the best conflict-free, fully parallel,
+or streaming architectures. The surveyed work makes the remaining direction
+clear: improve memory movement and inter-stage bandwidth while keeping the
+modular structure that made the design testable and portable across FPGA,
+processor-integration, and ASIC-oriented flows.
 \newpage
 
 \section{Developed Approach and System Model}
@@ -708,16 +679,12 @@ a processor wrapper, or reorganized for FPGA and ASIC memory implementations.
 \subsection{Data Model}
 
 The main mathematical object in the system is a polynomial over a finite modular
-ring. A polynomial is represented as an ordered array of coefficients:
-
-\[
-A(x) = a_0 + a_1x + a_2x^2 + \cdots + a_{N-1}x^{N-1},
-\]
-
-where every coefficient is reduced modulo a prime modulus $q$. The design was
+ring. A polynomial is represented as an ordered array of coefficients,
+\(A(x)=a_0+a_1x+a_2x^2+\cdots+a_{N-1}x^{N-1}\), where every coefficient is
+reduced modulo a prime modulus $q$. The design was
 evaluated with multiple parameter sets rather than one fixed configuration. The
 tested cases include \(N=256\) with 24-bit modulus width, \(N=4096\) with
-24-bit modulus width, and an exploratory \(N=4096\) case with 60-bit modulus
+24-bit modulus width, and \(N=4096\) case with 60-bit modulus
 width. The \(N=4096\), \(q=8380417\), 24-bit case is used later as the main
 software and FPGA comparison point because it provides a large transform size
 while remaining practical for simulation, synthesis, and FPGA evaluation.
@@ -733,32 +700,6 @@ to performing convolution through a transform-domain representation
 the negacyclic ring \(\mathbb{Z}_q[x]/(x^N+1)\). As a result, the implemented
 multiplication corresponds to negative-wrapped convolution (NWC), where
 coefficients that wrap past degree \(N-1\) return with a negative sign.
-
-\begin{table}[H]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\renewcommand{\arraystretch}{0.85}
-\caption{Parameters and implementation choices of the NTT accelerator}
-\label{tab:accelerator-params}
-\begin{tabularx}{\textwidth}{|c|Y|Y|}
-\hline
-Parameter & Meaning & Evaluated values / role \\
-\hline
-$N$ & Number of polynomial coefficients / transform size & 256 and 4096 \\
-\hline
-$q$ & Prime modulus used for coefficient arithmetic & 8380417 for the 24-bit comparison case; 60-bit parameters used for exploratory evaluation \\
-\hline
-WIDTH & Bit width of each coefficient & 24-bit and exploratory 60-bit configurations \\
-\hline
-ADDR\_WIDTH & Address width for coefficient and twiddle memories & Derived from \(N\) \\
-\hline
-PARALLEL & Number of butterfly operations processed per cycle & Evaluated at multiple \(P\) values; main reported cases use \(P=8\) and \(P=16\) \\
-\hline
-REDUCTION\_TYPE & Modular reduction selection & Barrett used for the main hardware-oriented path; simple modulo used for early checking \\
-\hline
-\end{tabularx}
-\end{table}
 
 The accelerator also uses twiddle factors. Twiddle factors are powers of roots of
 unity in modular arithmetic and are used by butterfly operations at each NTT
@@ -792,10 +733,6 @@ The inverse transform produces the final polynomial multiplication result.
 \caption{High-level NTT-based polynomial multiplication dataflow}
 \label{fig:ntt-dataflow}
 \end{figure}
-
-The important point in Figure~\ref{fig:ntt-dataflow} is that only the
-pointwise multiplication is performed directly in the transform domain; the
-inputs and final output remain coefficient-domain polynomials.
 
 The implemented accelerator is organized around a top-level polynomial
 multiplication module. This top-level module coordinates input loading, forward
@@ -839,18 +776,16 @@ coefficient storage, twiddle access, transform control, and top-level
 polynomial multiplication. This organization is not always the most
 latency-optimal choice, because values may be copied across clear module
 boundaries. However, those boundaries made the design easier to verify and
-analyze. They also make the memory implementation replaceable: coefficient
-storage can be mapped to FPGA BRAMs during FPGA experiments and to SRAM macros
-in an ASIC-oriented top level.
-
-% Earlier direct-memory design paragraph to be completed.
+analyze. They also make the memory subsystem easier to retarget, since the
+coefficient-storage interface can be connected to FPGA BRAM structures or to
+SRAM-backed ASIC wrappers without changing the butterfly datapath itself.
 
 The later coefficient-memory versions use a banked constant-geometry
 organization. In this structure, coefficients are distributed across memory
 banks and the address schedule keeps the stage-to-stage access pattern regular.
 This reduces stage-specific indexing logic, gives the butterfly lanes a more
-predictable memory interface, and makes the same architectural boundary easier
-to map either to FPGA BRAMs or to SRAM macros in an ASIC-oriented implementation.
+predictable memory interface, and helped the later FPGA implementations map
+coefficient storage into BRAM-backed structures more efficiently.
 
 The modular multiplication block is separated from the surrounding butterfly
 logic so that reduction latency and pipeline behavior can be analyzed clearly.
@@ -859,28 +794,9 @@ testing, but the main hardware-oriented path uses Barrett reduction
 \cite{kim-modmult}. This keeps the NTT datapath focused on the reduction
 method that was most relevant for the FPGA implementation results.
 
-\begin{table}[H]
-\centering
-\caption{Implementation options}
-\label{tab:config-options}
-\begin{tabularx}{\textwidth}{|c|Y|}
-\hline
-Design aspect & Supported alternatives \\
-\hline
-Modular multiplication & Barrett reduction for the main hardware path; simple modulo path for early correctness checking \\
-\hline
-Transform size & Parameterized, with 256-point and 4096-point configurations tested \\
-\hline
-Coefficient storage & Direct arrays and banked constant-geometry memory organization \\
-\hline
-Twiddle organization & Precomputed twiddle tables, with in-core generation considered and then left outside the NTT core \\
-\hline
-Execution parallelism & \(P\), the number of butterfly units used in parallel \\
-\hline
-Implementation target & RTL simulation, FPGA bitstream generation, ASIC GDSII-oriented flow \\
-\hline
-\end{tabularx}
-\end{table}
+The main configurable dimensions of the RTL are transform size, coefficient
+width, butterfly parallelism, coefficient-memory organization, twiddle storage,
+and modular-reduction backend.
 
 \subsection{Processor and RocketChip Integration}
 
@@ -903,7 +819,7 @@ through a Chisel BlackBox.
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.6\textwidth]{images/rocket.png}
+\includegraphics[width=0.4\textwidth]{images/rocket.png}
 \caption{Rocket Chip system organization}
 \label{fig:rocket-chip-system}
 \end{figure}
@@ -928,17 +844,6 @@ command arrival, and completion behavior from the whole-system simulation. These
 signals were useful for validating the processor-to-accelerator path, but they
 are not part of the minimal production interface of the accelerator.
 
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.92\textwidth]{mermaid/3_4_rocketchip_integration.png}
-\caption{RocketChip integration using a Chisel BlackBox wrapper}
-\label{fig:rocketchip-integration}
-\end{figure}
-
-Figure~\ref{fig:rocketchip-integration} should be read as the boundary between
-the processor generator and the hand-written RTL: Chisel owns the system
-integration, while the NTT datapath remains in Verilog/SystemVerilog.
-
 \subsection{Interface Model}
 
 The Rocket Custom Coprocessor (RoCC) interface is used as the processor-facing
@@ -953,49 +858,22 @@ data, sends a command through the RoCC interface, and the RoCC wrapper starts th
 NTT accelerator. The accelerator then performs the polynomial multiplication
 internally. While it is running, it raises a busy status. When the operation is
 complete, the done status is asserted and the result can be read by the host
-system. Depending on the final integration choice, polynomial data may be moved
-through explicit load/read signals or through addresses pointing to memory
-buffers managed by the processor. The current standalone RTL exposes explicit
-coefficient load and result read ports; a more memory-coupled RoCC integration
-can move this responsibility toward processor-managed buffers or a DMA-like
+system. In the current RoCC path, commands are mapped to explicit load, start,
+status, and read operations. The current standalone RTL exposes matching
+coefficient load and result read ports; a later memory-coupled integration could
+move this responsibility toward processor-managed buffers or a DMA-like
 interface.
 
-Table~\ref{tab:accelerator-interface} lists the standalone accelerator-side
-signals. In a processor-integrated system, a RoCC wrapper maps processor
-commands onto this lower-level load, start, status, and read interface.
+RoCC commands use custom RISC-V instruction encodings reserved for
+implementation-specific extensions. In the software tests, the instruction
+operands carry the coefficient address, coefficient data, or destination
+register, while the function field selects the accelerator operation such as
+load A, load B, start, status, or read. Conceptually, the instruction has the
+following form:
 
-\begin{table}[H]
-\centering
-\caption{Conceptual accelerator interface signals}
-\label{tab:accelerator-interface}
-\begin{tabularx}{\textwidth}{|c|c|Y|}
-\hline
-\textbf{Signal} & \textbf{Direction} & \textbf{Purpose} \\
-\hline
-clk & Input & Clock signal for synchronous accelerator logic \\
-\hline
-reset & Input & Reset signal used to initialize control state \\
-\hline
-start & Input & Starts polynomial multiplication after inputs are prepared \\
-\hline
-busy & Output & Indicates that the accelerator is executing \\
-\hline
-done & Output & Indicates that the operation has completed \\
-\hline
-load\_coeff & Input & Enables coefficient loading into accelerator memory \\
-\hline
-load\_sel & Input & Selects which input polynomial is being loaded \\
-\hline
-load\_addr & Input & Address of the coefficient being loaded \\
-\hline
-load\_data & Input & Coefficient value being loaded \\
-\hline
-read\_addr & Input & Address of the output coefficient being read \\
-\hline
-read\_data & Output & Output coefficient value returned by the accelerator \\
-\hline
-\end{tabularx}
-\end{table}
+\begin{lstlisting}[language={[x86masm]Assembler},caption={Conceptual RoCC custom instruction form},label={lst:rocc-instruction-form}]
+customX rd, rs1, rs2, funct
+\end{lstlisting}
 
 This interface separates the accelerator datapath from the processor connection.
 The same RTL accelerator can be tested standalone using simulation testbenches,
@@ -1042,6 +920,8 @@ In the inverse transform, the final result also includes multiplication by
 \(N^{-1}\) modulo \(q\).
 
 \begin{algorithm}[H]
+\scriptsize
+\setlength{\baselineskip}{8.5pt}
 \caption{Constant-geometry NTT schedule used by the RTL}
 \label{alg:cg-ntt}
 \begin{algorithmic}[1]
@@ -1097,7 +977,10 @@ with other configurations is left to the evaluation chapter.
 
 \subsection{Board Selection}
 
-The FPGA target was chosen with both capacity and tool availability in mind. The accelerator was intended to be tested together with a RocketChip-based system; however, Chipyard project only provides support for the following boards so the board had to be selected based on the biggest LUT count:
+Because the accelerator was intended to be tested with a RocketChip-based
+system, board selection was constrained by both FPGA capacity and the boards
+supported by the available Chipyard/Vivado flow. The candidate boards are
+summarized in Table~\ref{tab:board-selection}.
 
 \begin{table}[H]
 \centering
@@ -1105,7 +988,7 @@ The FPGA target was chosen with both capacity and tool availability in mind. The
 \label{tab:board-selection}
 \begin{tabular}{|l|l|c|c|}
 \hline
-\textbf{Board} & \textbf{FPGA} & \textbf{Standard edition} & \textbf{LUT count} \\
+\textbf{Board} & \textbf{FPGA} & \textbf{Free tool support} & \textbf{LUT count} \\
 \hline
 Arty / Arty A7-35 & Artix-7 XC7A35T & supported & \(\sim\)20K \\
 \hline
@@ -1122,7 +1005,10 @@ VCU118 & Virtex UltraScale+ XCVU9P & not supported & \(\sim\)1.18M \\
 \end{tabular}
 \end{table}
 
-Nexys Video provides the largest LUT capacity among the considered boards while still remaining compatible with the standard free Vivado flow. For this reason, the project focused on Nexys Video and Artix-7 for FPGA implementation path.
+Nexys Video provides the largest LUT capacity among the considered boards while
+still remaining compatible with the free FPGA tool flow. For this reason, the
+project focused on the Nexys Video Artix-7 device for the main FPGA
+implementation path.
 
 \newpage
 \section{Experimentation Environment and Experiment Design}
@@ -1131,33 +1017,43 @@ The evaluation was performed at multiple levels because the project contains bot
 
 \subsection{Experimentation Environment}
 
-Verilator was used for cycle-level RTL simulation. It was useful for testing
-processor and hardware behavior with fast simulation turnaround. Cocotb was used
-for Python-driven testbenches, especially for the NTT accelerator and its
-submodules. Cocotb allowed the hardware outputs to be compared directly against
-Python reference models for modular arithmetic, butterfly operations, forward
-NTT, inverse NTT, and top-level polynomial multiplication.
+The evaluation used different tools for different levels of evidence.
+Verilator was used for fast cycle-level processor and RTL simulation, while
+cocotb was used for Python-driven accelerator testbenches against software
+reference models. Yosys provided early synthesis checks during development, and
+the FPGA implementation flow provided the resource, timing, BRAM, and DSP
+measurements used in the later comparison tables.
 
-Yosys was used as an open-source synthesis tool during the development flow. It
-provided quick feedback on whether the RTL could be synthesized and helped catch
-structural issues early. Vivado was used for FPGA-oriented timing and resource
-analysis. Compared with simulation-only tools, Vivado provided the most relevant
-feedback on LUT usage, BRAM usage, DSP mapping, timing period, and whether the
-RTL was expressed in a way that mapped efficiently to FPGA resources.
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.5\textwidth]{images/fpga-layout.png}
-\caption{Vivado Artix-7 FPGA implementation layout view of the NTT module}
-\label{fig:vivado-fpga-layout}
-\end{figure}
-
-The RocketChip integration path was evaluated using Chipyard-level software
+The RocketChip integration path was evaluated using Chipyard software
 tests. In this flow, top-level C code can be used to exercise the generated
 RocketChip system and verify that the accelerator can be invoked through the
 processor-facing interface. The RTL accelerator is modeled as a Chisel BlackBox
 and connected through the RoCC interface, so this level of testing is important
 for checking full-system functionality beyond standalone RTL simulation.
+
+The earlier custom-core stage was also tested with a UART memory-mapped I/O path
+using a bare-metal communication program compiled with a standard RISC-V
+toolchain. Listing~\ref{lst:uart-echo-test} shows the structure of this test.
+It was not an NTT benchmark; it was used to verify that compiled software,
+MMIO-based UART access, and external communication worked together on the custom
+processor path.
+
+\begin{lstlisting}[language=C,caption={Bare-metal UART echo test used for the custom RISC-V core},label={lst:uart-echo-test}]
+int main(void)
+{
+    uart_write_str("Hello\r\n");
+
+    while (1) {
+        uart_write_str("Please enter something:\r\n");
+        uart_read_str(buf, sizeof(buf));
+        uart_write_str("You said: ");
+        uart_write_str(buf);
+        uart_write_str("\r\n");
+    }
+
+    return 0;
+}
+\end{lstlisting}
 
 Listing~\ref{lst:rocc-verilator-test} shows the structure of the C-side test
 used in the Chipyard/Verilator flow. The test maps accelerator operations to
@@ -1165,6 +1061,7 @@ RoCC custom instructions, loads both input polynomials, starts the accelerator,
 polls the status register until completion, and then reads the output
 coefficients back through the same processor-facing path.
 
+\newpage
 \begin{lstlisting}[language=C,caption={Chipyard/Verilator RoCC test structure for invoking the NTT accelerator},label={lst:rocc-verilator-test}]
 static inline void ntt_load_a(uint64_t addr, uint64_t data)
 {
@@ -1206,13 +1103,13 @@ Finally, an ASIC-oriented physical-design run was performed for the accelerator
 block. OpenLane is an automated RTL-to-GDSII flow built around components such
 as OpenROAD and Yosys \cite{openlane}. LibreLane is a newer OpenLane-derived
 flow with a cleaner command interface, and it was used separately from the
-Chipyard whole-system flow to run only the NTT accelerator block. The final
-target artifact of this run is a GDSII layout,
-which represents the placed-and-routed ASIC block.
+Chipyard whole-system flow to run only the NTT accelerator block. The run
+produced a placed-and-routed accelerator layout used as an initial
+ASIC-oriented physical-design result.
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.5\textwidth]{images/librelane-layout.png}
+\includegraphics[width=0.4\textwidth]{images/librelane-layout.png}
 \caption{LibreLane ASIC layout view of the accelerator at 50 MHz with a \(1500~\mu\mathrm{m} \times 1500~\mu\mathrm{m}\) floorplan}
 \label{fig:librelane-asic-layout}
 \end{figure}
@@ -1239,11 +1136,18 @@ in command handling, memory movement, or host-visible completion behavior.
 The final layer focused on synthesis and implementation results. Vivado was used
 to compare different accelerator versions in terms of LUT usage and timing. The
 main purpose of these experiments was to understand how architectural changes
-affected hardware cost and maximum achievable clock speed. The results show that
-the initial direct implementation was too large, while later coefficient-bank and
-BRAM-oriented versions significantly reduced LUT usage and improved timing.
+affected hardware cost and maximum achievable clock speed. The results were
+used to identify why the initial direct implementation was too large and why
+later memory-oriented versions mapped more efficiently.
 
 \subsection{Synthesis and Implementation Findings}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.4\textwidth]{images/fpga-layout.png}
+\caption{Vivado Artix-7 FPGA implementation layout view of the NTT module}
+\label{fig:vivado-fpga-layout}
+\end{figure}
 
 Synthesis and implementation results were especially important because they
 exposed the practical FPGA cost of each design version. Simulation verifies
@@ -1252,12 +1156,23 @@ LUTs, BRAMs, and DSPs or whether the design can meet a target clock period. For
 this reason, each major version of the accelerator was synthesized and compared
 using LUT count and timing period as the primary metrics.
 
+Table~\ref{tab:fpga-variant-results} uses short version names to keep the table
+readable. The baseline rows correspond to the first direct RTL organizations
+that were useful for correctness but inefficient for implementation. The
+constant-geometry row introduces the regular stage schedule, while the following
+BRAM-oriented rows progressively move coefficient, intermediate, and twiddle
+storage into explicit memory resources. The timing-improved rows then keep the
+same general banked organization but refine BRAM access timing and DSP-oriented
+modular multiplication timing. The 60-bit rows report the wider-coefficient
+configuration after the same implementation lessons were applied.
+
 \begin{table}[H]
 \centering
 \scriptsize
 \setlength{\tabcolsep}{3pt}
 \renewcommand{\arraystretch}{1.12}
 \caption{FPGA resource and timing results for NTT accelerator variants}
+\label{tab:fpga-variant-results}
 \begin{tabularx}{\textwidth}{|l|l|Y|r|r|r|r|}
 \hline
 \textbf{Version} & \textbf{Device} & \textbf{Config.} & \textbf{LUT} & \textbf{BRAM} & \textbf{DSP} & \textbf{Period} \\
@@ -1286,13 +1201,23 @@ constant-geometry & UltraScale & $N=256$, $P=8$, 24-bit & 162.0k & 24 & 124 & 30
 \hline
 + better BRAM timings & UltraScale & $N=4096$, $P=8$, 24-bit & 17.8k & 98 & 108 & 4.000 ns \\
 \hline
-+ better DSP timings & Artix-7 & $N=4096$, $P=8$, 24-bit & 7.9k & 97 & 108 & 7.600 ns \\
 \hline
-+ better DSP timings & UltraScale & $N=4096$, $P=8$, 24-bit & 8.2k & 97 & 108 & 4.000 ns \\
+final 24-bit version & Artix-7 & $N=4096$, $P=8$, 24-bit & 7.9k & 97 & 108 & 14.000 ns \\
 \hline
-final version & UltraScale & $N=4096$, $P=16$, 60-bit & 49.0k & 403 & 782 & 5.500 ns \\
+final 24-bit version & Artix-7 & $N=4096$, $P=16$, 24-bit & 18.5k & 191 & 170 & 15.000 ns \\
 \hline
-final version & Artix-7 & $N=4096$, $P=8$, 60-bit & 25.7k & 219 & 558 & 16.000 ns \\
+final 60-bit version & Artix-7 & $N=4096$, $P=8$, 60-bit & 25.7k & 219 & 558 & 16.000 ns \\
+\hline
+final 60-bit version & Artix-7 & $N=4096$, $P=16$, 60-bit & - & - & - & - \\
+\hline
+\hline
+final 24-bit version & UltraScale & $N=4096$, $P=8$, 24-bit & 8.2k & 97 & 108 & 4.000 ns \\
+\hline
+final 24-bit version & UltraScale & $N=4096$, $P=16$, 24-bit & 18.4k & 191 & 170 & 5.000 ns \\
+\hline
+final 60-bit version & UltraScale & $N=4096$, $P=8$, 60-bit & 22.9k & 219 & 414 & 5.500 ns \\
+\hline
+final 60-bit version & UltraScale & $N=4096$, $P=16$, 60-bit & 49.0k & 403 & 782 & 5.500 ns \\
 \hline
 \end{tabularx}
 \end{table}
@@ -1300,8 +1225,10 @@ final version & Artix-7 & $N=4096$, $P=8$, 60-bit & 25.7k & 219 & 558 & 16.000 n
 Here, \(P\) denotes the configured butterfly parallelism. The Artix-7 results
 target the xc7a200tsbv484-1 device, and the UltraScale results target the
 xcu200-fsgd2104-2-e device. The table reports post-implementation results from
-the provided Vivado runs. LUT count, BRAM count, DSP count, and timing period
-are used as the main comparison metrics; slice register count is not included
+the provided Vivado runs. The selected Artix-7 device uses speed grade 1; using
+a speed grade 3 Artix-7 part would be expected to reduce the reported timing
+periods by roughly 20\%. LUT count, BRAM count, DSP count, and timing period are
+used as the main comparison metrics; slice register count is not included
 because it was not needed for the main design conclusions.
 
 The first important observation is that the baseline unoptimized implementation
@@ -1392,164 +1319,24 @@ configuration also reports 3081 clock cycles, but at 150 MHz.
 
 The implemented accelerator in this project uses a configurable butterfly
 datapath with banked coefficient storage and BRAM-based twiddle storage. In the
-best reported FPGA-oriented version, the design reaches approximately 7.9k LUTs
-on Artix-7 and 8.2k LUTs on UltraScale for the $N=4096$ configuration with
-eight parallel butterfly units. The transform controller schedules approximately
-3192 cycles for one forward NTT with the current pipeline assumptions. This is close to the
-3081-cycle PE=8 literature result, but the complete top-level polynomial
-multiplication takes longer because it includes two forward transforms, the
-pointwise multiplication stage, the inverse transform, and several full-vector
-copy stages.
+24-bit \(N=4096\), \(P=8\) configuration, the UltraScale implementation reached
+approximately 8.2k LUTs at the reported operating point. The transform
+controller schedules approximately 3192 cycles for one forward NTT with the
+current pipeline assumptions. This is close to the 3081-cycle PE=8 literature
+result, but the complete top-level polynomial multiplication takes longer
+because it includes two forward transforms, the pointwise multiplication stage,
+the inverse transform, and several full-vector copy stages.
 
 \subsection{Project Hardware Results}
 
 The detailed FPGA synthesis and implementation results are reported in the
-Vivado findings section. The most important trend is that the later
+synthesis and implementation findings section. The most important trend is that the later
 banked-memory versions of the accelerator are much smaller than the initial
 direct implementation. The baseline unoptimized version reached 269,367 LUTs,
 while the later v4 versions reached approximately 8k LUTs for the \(N=4096\),
 \(P=8\), 24-bit configuration. This reduction is one of the main outcomes of the
 project: the same mathematical operation became much more FPGA-friendly after
 the coefficient storage, twiddle access, and datapath organization were changed.
-
-\subsection{Evaluation Against Interim Project Objectives}
-
-The interim report defined the project through functional and non-functional
-requirements. The final project did not follow every early assumption exactly:
-the FPGA target changed from the initially listed Tang Nano 20K direction toward
-Artix-7/Nexys Video and larger comparison devices, and the integration direction
-moved from the custom core toward RocketChip/Chipyard. However, the main
-technical objectives can still be evaluated against the final implemented work.
-
-\subsubsection{Functional Requirements}
-
-The key functional requirements for this project were as follows:
-
-\begin{table}[H]
-\centering
-\scriptsize
-\setlength{\tabcolsep}{3pt}
-\renewcommand{\arraystretch}{1.05}
-\caption{Evaluation of functional requirements from the interim report}
-\label{tab:functional-requirements-eval}
-\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.34\textwidth}|>{\centering\arraybackslash}p{0.15\textwidth}|>{\raggedright\arraybackslash}X|}
-\hline
-Interim functional requirement & Status & Final evaluation \\
-\hline
-The system shall implement a compliant RV32IMA core capable of executing basic RISC-V programs. & Partially met & A custom RISC-V core was implemented and used to study instruction execution and accelerator attachment. The final integration direction moved to RocketChip rather than continuing the hand-written core as the main target. \\
-\hline
-The system shall support standard RISC-V toolchains such as GCC or LLVM for compiling and running test programs. & Met through integration path & The project used a RISC-V software flow for test programs, and the RocketChip/Chipyard path provides the standard toolchain-compatible system direction. \\
-\hline
-The system shall provide a custom instruction interface or memory-mapped control interface to invoke NTT operations. & Met & The accelerator was connected through a processor-facing custom-instruction/RoCC-style path, with C-level tests used to exercise the invocation flow. \\
-\hline
-The system shall perform NTT and inverse NTT operations using hardware acceleration. & Met & The complete NTT-based polynomial multiplication datapath was implemented in synthesizable RTL and verified against reference models. \\
-\hline
-The system shall be easily simulated using testbenches. & Met & Arithmetic blocks, butterfly units, NTT/INTT modules, and the full polynomial multiplier were tested with Verilator/cocotb-style simulation and Python reference models. \\
-\hline
-The system shall support execution of NTT-accelerated programs. & Met at test level & The accelerator was exercised through C/custom-instruction mapping in simulation and through the RocketChip-oriented integration path. Full application-level benchmarking remains future work. \\
-\hline
-The system shall be implementable on a target FPGA platform. & Met with changed target & The original Tang Nano 20K assumption was not kept because the design grew toward RocketChip integration and larger NTT parameters. The practical target became Artix-7/Nexys Video, with additional UltraScale-oriented evaluation. \\
-\hline
-The system shall allow comparison of execution performance between software-only and hardware-accelerated NTT. & Met & C++ scalar, AVX2, and AVX-512 benchmarks were added and compared against FPGA cycle estimates for both 24-bit and 60-bit configurations. \\
-\hline
-\end{tabularx}
-\end{table}
-
-\subsubsection{Non-Functional Requirements}
-
-The key non-functional requirements for this project were as follows:
-
-\begin{table}[H]
-\centering
-\scriptsize
-\setlength{\tabcolsep}{3pt}
-\renewcommand{\arraystretch}{1.05}
-\caption{Evaluation of non-functional requirements from the interim report}
-\label{tab:nonfunctional-requirements-eval}
-\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.34\textwidth}|>{\centering\arraybackslash}p{0.15\textwidth}|>{\raggedright\arraybackslash}X|}
-\hline
-Interim non-functional requirement & Status & Final evaluation \\
-\hline
-The system should be modular and maintainable, allowing future extensions. & Met & The RTL is split into arithmetic blocks, butterfly units, coefficient memories, twiddle memories, transform controllers, and a top-level polynomial multiplier, which made targeted replacement and analysis possible. \\
-\hline
-The system should demonstrate a performance gain of at least \(4\times\) over software-based NTT in execution time. & Met for forward NTT & The standalone forward-NTT comparison exceeds the \(4\times\) target: the 24-bit and 60-bit scalar measurements give approximately \(12.2\times\) and \(12.8\times\) speedup, respectively, when compared with the RTL forward-transform cycle estimate. The full polynomial multiplication flow still shows lower speedup because load/store and inter-stage movement overhead dominate the end-to-end latency. \\
-\hline
-The system should be resource-efficient and fit within the constraints of an entry-level FPGA. & Partially met / changed target & The final optimized 24-bit versions became much smaller than the initial RTL, but the complete RocketChip-plus-accelerator direction is not realistic for the smallest entry-level boards. The board target was shifted toward Artix-7/Nexys Video-class capacity. \\
-\hline
-The design should prioritize clarity and simplicity to ease verification and testing. & Met & The design deliberately keeps module boundaries visible. This is not always latency-optimal, but it made simulation, synthesis debugging, and later BRAM/SRAM replacement clearer. \\
-\hline
-The system should follow open-source standards and be compatible with SystemVerilog toolchains. & Met & The accelerator is written in Verilog/SystemVerilog, tested with open simulation flows, and connected to open RISC-V/RocketChip-oriented infrastructure. Vendor FPGA tools were used for final timing and resource measurements. \\
-\hline
-The system should investigate many different novel approaches. & Met & The project investigated direct and banked memories, constant-geometry indexing, precomputed versus generated twiddles, Barrett-oriented modular multiplication, different \(N\), width, and \(P\) values, FPGA and ASIC-oriented memory mappings, and RocketChip integration. \\
-\hline
-\end{tabularx}
-\end{table}
-
-\begin{table}[H]
-\centering
-\scriptsize
-\caption{PipeNTT implementation results and comparison to prior work}
-\label{tab:pipentt-prior-work}
-\resizebox{\textwidth}{!}{%
-\begin{tabular}{|c|c|c|c|r|r|r|r|r|r|r|}
-\hline
-\textbf{Work} & \textbf{Platform} & \textbf{\makecell{\(n,\)\\\(\log_2(q)\)}} & \textbf{LUT/FF/DSP/BRAM} & \textbf{Area\(^a\)} & \textbf{Cycles} & \textbf{\makecell{Clock\\(MHz)}} & \textbf{\makecell{Avg.\\Time\(^b\)}} & \textbf{TP\(^c\)} & \textbf{LUT \(\times\) T} & \textbf{Area \(\times\) T} \\
-\hline
-\cite{pipe-15}\(^{d}\) & Zynq-7000 & \multirow{2}{*}{512, 14} & 741/330/2/5 & 2441 & 1289 & 245 & 5.3 & 1352 & 3927 & 12937 \\
-\cline{1-2}\cline{4-11}
-\cite{pipentt} & Virtex-7 & & 2178/1694/8/3 & 3878 & 1074 & 234 & 2.3 & 3117 & 5009 & 8919 \\
-\hline
-\cite{pipe-15}\(^{d}\) & Zynq-7000 & \multirow{4}{*}{1024, 14} & 847/375/2/6 & 2847 & 2569 & 244 & 10.5 & 1365 & 8894 & 29894 \\
-\cline{1-2}\cline{4-11}
-\cite{pipe-14}\(^{d}\) & Artix-7 & & 798/715/4/2 & 1798 & 1591 & 234 & 6.8 & 2108 & 5426 & 12226 \\
-\cline{1-2}\cline{4-11}
-\cite{pipe-16} & Artix-7 & & 4938/2882/8/- & - & 1280 & 152 & 8.4 & 1703 & 41578 & - \\
-\cline{1-2}\cline{4-11}
-\cite{pipentt} & Virtex-7 & & 2151/1475/9/2.5 & 3801 & 2104 & 232 & 4.5 & 3186 & 9680 & 17105 \\
-\hline
-\cite{pipe-17}\(^{d}\) & Artix-7 & \multirow{2}{*}{256, 12} & 2543/792/4/9 & 5643 & 232 & 182 & 1.3 & 2363 & 3306 & 7336 \\
-\cline{1-2}\cline{4-11}
-\cite{pipentt} & Virtex-7 & & 1362/1036/7/0.5 & 2212 & 556 & 235 & 1.2 & 2560 & 1634 & 2654 \\
-\hline
-\cite{pipe-5} & Virtex-7 & \multirow{2}{*}{256, 16} & 7400/5000/24/24 & 17000 & 160 & 147 & 1.1 & 3724 & 8140 & 18700 \\
-\cline{1-2}\cline{4-11}
-\cite{pipentt} & Virtex-7 & & 2294/1645/7/3 & 3894 & 556 & 228 & 1.2 & 3413 & 2753 & 4673 \\
-\hline
-\cite{pipe-5} & Virtex-7 & \multirow{2}{*}{512, 16} & 8100/5200/24/24 & 17700 & 345 & 141 & 2.4 & 3413 & 19440 & 42480 \\
-\cline{1-2}\cline{4-11}
-\cite{pipentt} & Virtex-7 & & 2482/1876/8/4 & 4482 & 1074 & 227 & 2.5 & 3277 & 6205 & 11205 \\
-\hline
-\cite{pipe-18} & UltraScale+ & \multirow{2}{*}{1024, 16} & 3140/3007/58/29 & 17640 & 6212 & 183 & 33.9 & 483 & 106446 & 597996 \\
-\cline{1-2}\cline{4-11}
-\cite{pipentt} & Virtex-7 & & 2234/1624/9/3 & 4025 & 2104 & 230 & 4.5 & 3640 & 10013 & 18113 \\
-\hline
-\cite{pipe-5} & Virtex-7 & \multirow{3}{*}{1024, 28} & 132K/59K/448/96 & 205.6K & 250 & 125 & 2.0 & 14336 & 118K & 411.2K \\
-\cline{1-2}\cline{4-11}
-\cite{pipe-5} & Virtex-7 & & 16K/14K/56/24 & 28.8K & 490 & 125 & 3.9 & 7352 & 62K & 112.3K \\
-\cline{1-2}\cline{4-11}
-\cite{pipentt} & Virtex-7 & & 3.4K/3.1K/63/6 & 11.5K & 2114 & 175 & 6.0 & 4779 & 20.4K & 69K \\
-\hline
-\cite{pipe-5} & Virtex-7 & \multirow{5}{*}{4096, 60} & 338K/138K/1984/768 & 767.8K & 972 & 125 & 7.0 & 35109 & 2366K & 5375K \\
-\cline{1-2}\cline{4-11}
-\cite{pipe-5} & Virtex-7 & & 22K/17K/248/96 & 75.6K & 3276 & 125 & 26.0 & 9452 & 572K & 1966K \\
-\cline{1-2}\cline{4-11}
-\cite{pipentt} & Virtex-7 & & 17K/11K/286/24.5 & 52.9K & 8284 & 150 & 27.5 & 8937 & 467.5K & 1455K \\
-\cline{1-2}\cline{4-11}
-\textbf{This} & \textbf{Artix-7} & & \textbf{11214/7037/248/92} & \textbf{63.6K} & \textbf{3193} & \textbf{64.5} & \textbf{49.5} & \textbf{4966} & \textbf{555K} & \textbf{3148K} \\
-\cline{1-2}\cline{4-11}
-\textbf{This} & \textbf{UltraScale+} & & \textbf{10690/6492/184/92} & \textbf{56.7K} & \textbf{3193} & \textbf{181.8} & \textbf{17.6} & \textbf{13994} & \textbf{188K} & \textbf{996K} \\
-\hline
-\end{tabular}%
-}
-\vspace{2pt}
-\begin{minipage}{0.96\textwidth}
-\scriptsize
-\(^a\) Area is measured by \(\#\mathrm{LUTs}+100\times\#\mathrm{DSPs}+300\times\#\mathrm{BRAMs}\).
-\(^b\) Average latency is measured by running 100 NTT operations.
-\(^c\) Throughput is the number of processing bits per second.
-\(^d\) Modular reduction is optimized for a specific parameter \(q\) without DSPs.
-\end{minipage}
-\end{table}
 
 \subsection{Software Baseline Comparison}
 
@@ -1652,26 +1439,6 @@ time is computed from the forward transform cycle count and the reported
 post-implementation timing period. This removes the top-level load, readback,
 pointwise, and inverse-transform phases from the comparison.
 
-\begin{table}[H]
-\centering
-\small
-\caption{FHE accelerator context from Roy et al.}
-\label{tab:roy-fhe-context}
-\begin{tabular}{|l|c|c|}
-\hline
-\textbf{Operation} & \textbf{Reported value} & \textbf{Meaning} \\
-\hline
-NTT \cite{fpga-fhe} & 87,582 cycles/call & Instruction latency \\
-\hline
-INTT \cite{fpga-fhe} & 102,043 cycles/call & Instruction latency \\
-\hline
-Coefficient multiplication \cite{fpga-fhe} & 15,662 cycles/call & Instruction latency \\
-\hline
-HE multiplication \cite{fpga-fhe} & 4.46/0.54/5.0 ms & Computation/communication/total \\
-\hline
-\end{tabular}
-\end{table}
-
 The software comparison shows three different conclusions. First, the standalone
 forward NTT result satisfies the interim \(4\times\) acceleration target with a
 comfortable margin. The measured CPU forward-transform times are 155.65
@@ -1696,43 +1463,16 @@ not reduce total latency proportionally. This is why the strongest future
 optimization direction is not only adding more butterfly units, but reducing or
 overlapping the inter-stage memory movement.
 
-\subsection{Comparison With Liu et al. Table I}
+\subsection{Comparison With FPGA NTT Accelerator Literature}
 
-Table \ref{tab:liu-comparison} compares the implemented design against selected
-rows from Liu et al. Table I. The literature rows are copied only for the
-configurations most relevant to this project: $N=4096$ with PE=8, and the
-higher-PE rows that show the performance trend of their architecture. The
-project rows report the transform-level estimate of the current NTT engine.
-Resource fields that are not available in a directly comparable form are left
-blank. The full polynomial multiplication cycle count is intentionally not used
-in this table, because Liu et al. report transform-level NTT/INTT measurements
-rather than a complete two-input polynomial multiplication sequence.
-
-\begin{table}[H]
-\centering
-\scriptsize
-\caption{Comparison with selected Liu et al. Table I configurations}
-\label{tab:liu-comparison}
-\begin{tabularx}{\textwidth}{|Y|c|c|c|c|c|c|}
-\hline
-\textbf{Design} & \(\boldsymbol{\lceil \lg p \rceil}\) & \textbf{N} & \textbf{\makecell{PE /\\Parallelism}} & \textbf{Freq.} & \textbf{Cycles} & \textbf{Latency} \\
-\hline
-Liu et al. & 24 & 4096 & 8 & 220 MHz & 3081 & 14.0 $\mu$s \\
-\hline
-Liu et al. & 60 & 4096 & 8 & 150 MHz & 3081 & 20.5 $\mu$s \\
-\hline
-Liu et al. & 60 & 4096 & 32 & 133 MHz & 777 & 5.8 $\mu$s \\
-\hline
-Liu et al. & 60 & 4096 & 64 & 130 MHz & 393 & 3.0 $\mu$s \\
-\hline
-This work, Artix-7 operating point & 24 & 4096 & 8 & 100 MHz & $\approx$3192 & $\approx$31.9 $\mu$s \\
-\hline
-This work, UltraScale+ operating point & 24 & 4096 & 8 & 250 MHz & $\approx$3192 & $\approx$12.8 $\mu$s \\
-\hline
-This work, 60-bit configuration path & 60 & 4096 & 8/16 & & & \\
-\hline
-\end{tabularx}
-\end{table}
+Table~\ref{tab:liu-detailed-scaling} compares the implemented design against
+selected rows from Liu et al. Table I. The project rows report the
+transform-level estimate of the current NTT engine. The full polynomial
+multiplication cycle count is intentionally not used in this table, because Liu
+et al. report transform-level NTT/INTT measurements rather than a complete
+two-input polynomial multiplication sequence. The selected Liu et al. rows in
+this comparison are reported for a Virtex-7 FPGA; the project rows use the
+Artix-7 and UltraScale+ operating points stated in the table.
 
 \begin{table}[H]
 \centering
@@ -1780,9 +1520,9 @@ This work, 60-bit configuration path & 60 & 4096 & 8/16 & & & \\
 \cline{4-11}
 & & & 64 & 130 & 393 & 3.0 & 108k/326.5 & 95.2k/287.8 & 320/967.4 & 1.4k \\
 \hline
-This work (Artix-7) & 60 & 4096 & 8 & 64.5 & 3193 & 49.5 & 11.2k/555k & 7.0k/348.3k & 92/4.6k & 3.1k \\
+\textbf{This work (Artix-7)} & \textbf{60} & \textbf{4096} & \textbf{8} & \textbf{64.5} & \textbf{3193} & \textbf{49.5} & \textbf{11.2k/555k} & \textbf{7.0k/348.3k} & \textbf{92/4.6k} & \textbf{3.1k} \\
 \hline
-This work (UltraScale+) & 60 & 4096 & 8 & 181.8 & 3193 & 17.6 & 10.7k/188k & 6.5k/114.3k & 92/1.6k & 1.0k \\
+\textbf{This work (UltraScale+)} & \textbf{60} & \textbf{4096} & \textbf{8} & \textbf{181.8} & \textbf{3193} & \textbf{17.6} & \textbf{10.7k/188k} & \textbf{6.5k/114.3k} & \textbf{92/1.6k} & \textbf{1.0k} \\
 \hline
 \multirow{2}{*}{\cite{area-efficient}} & \multirow{2}{*}{32} & 1024 & 8 & 233 & 649 & 2.8 & 6.7k/18.8 & 6.4k/17.8 & 20/55.7 & 60 \\
 \cline{3-11}
@@ -1794,9 +1534,9 @@ This work (UltraScale+) & 60 & 4096 & 8 & 181.8 & 3193 & 17.6 & 10.7k/188k & 6.5
 \cline{4-11}
 & & & 16 & 220 & 1545 & 7.0 & 10.8k/76.3 & 9.5k/66.8 & 40/280.9 & 239 \\
 \hline
-This work (Artix-7) & 24 & 4096 & 8 & 100 & 3193 & 31.9 & 7.9k/252.0 & - & 97/3.1k & 1.5k \\
+\textbf{This work (Artix-7)} & \textbf{24} & \textbf{4096} & \textbf{8} & \textbf{100} & \textbf{3193} & \textbf{31.9} & \textbf{7.9k/252.0} & \textbf{6.7k/212.9} & \textbf{97/3.1k} & \textbf{1.5k} \\
 \hline
-This work (UltraScale+) & 24 & 4096 & 8 & 250 & 3193 & 12.8 & 8.2k/104.7 & - & 97/1.2k & 616 \\
+\textbf{This work (UltraScale+)} & \textbf{24} & \textbf{4096} & \textbf{8} & \textbf{250} & \textbf{3193} & \textbf{12.8} & \textbf{8.2k/104.7} & \textbf{6.7k/85.4} & \textbf{97/1.2k} & \textbf{616} \\
 \hline
 \multirow{6}{*}{\cite{area-efficient}} & \multirow{6}{*}{14} & \multirow{6}{*}{1024} & 1 & 319 & 5129 & 16.1 & 607/9.8 & 460/7.4 & 2.5/40.2 & 26.6 \\
 \cline{4-11}
@@ -1826,17 +1566,10 @@ computed as
 (\mathrm{LUT} + 100 \times \mathrm{DSP} + 300 \times \mathrm{BRAM})
 \times \mathrm{Latency}/1000 .
 \]
-For the project rows, this gives approximately \(3.1\mathrm{k}\) for the
-60-bit Artix-7 row, \(1.0\mathrm{k}\) for the 60-bit UltraScale+ row,
-\(1.5\mathrm{k}\) for the 24-bit Artix-7 operating point, and \(616\) for the
-24-bit UltraScale+ operating point. A dash means that the corresponding value
-was not reported or is not available in a directly comparable form. Starred
-PE rows use the alternative coefficient-storage mapping reported by Liu et al.,
-which reduces BRAM pressure by changing how coefficients are stored.
 \end{minipage}
 \end{table}
 
-The most important observation from Table \ref{tab:liu-comparison} is that the
+The most important observation from Table~\ref{tab:liu-detailed-scaling} is that the
 project's transform-level cycle count is close to the PE=8 literature result.
 The current NTT engine requires approximately 3192 cycles, while Liu et al.
 report 3081 cycles for PE=8. This is a difference of roughly 3.6\% in cycle
@@ -1872,6 +1605,74 @@ remaining architectural work is not only faster butterfly arithmetic, but wider
 memory movement between transform, pointwise, inverse-transform, and readback
 stages.
 
+Table~\ref{tab:pipentt-prior-work} gives additional FPGA NTT context from PipeNTT and the prior designs summarized in that work. These rows are not used as direct full-polynomial-multiplication comparisons; they provide a broader transform-level reference for area, latency, and memory tradeoffs.
+
+\begin{table}[H]
+\centering
+\scriptsize
+\caption{PipeNTT implementation results and comparison to prior work}
+\label{tab:pipentt-prior-work}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|c|c|c|c|r|r|r|r|r|r|r|}
+\hline
+\textbf{Work} & \textbf{Platform} & \textbf{\makecell{\(n,\)\\\(\log_2(q)\)}} & \textbf{LUT/FF/DSP/BRAM} & \textbf{Area\(^a\)} & \textbf{Cycles} & \textbf{\makecell{Clock\\(MHz)}} & \textbf{\makecell{Avg.\\Time\(^b\)}} & \textbf{TP\(^c\)} & \textbf{LUT \(\times\) T} & \textbf{Area \(\times\) T} \\
+\hline
+\cite{pipe-15}\(^{d}\) & Zynq-7000 & \multirow{2}{*}{512, 14} & 741/330/2/5 & 2441 & 1289 & 245 & 5.3 & 1352 & 3927 & 12937 \\
+\cline{1-2}\cline{4-11}
+\cite{pipentt} & Virtex-7 & & 2178/1694/8/3 & 3878 & 1074 & 234 & 2.3 & 3117 & 5009 & 8919 \\
+\hline
+\cite{pipe-15}\(^{d}\) & Zynq-7000 & \multirow{4}{*}{1024, 14} & 847/375/2/6 & 2847 & 2569 & 244 & 10.5 & 1365 & 8894 & 29894 \\
+\cline{1-2}\cline{4-11}
+\cite{pipe-14}\(^{d}\) & Artix-7 & & 798/715/4/2 & 1798 & 1591 & 234 & 6.8 & 2108 & 5426 & 12226 \\
+\cline{1-2}\cline{4-11}
+\cite{pipe-16} & Artix-7 & & 4938/2882/8/- & - & 1280 & 152 & 8.4 & 1703 & 41578 & - \\
+\cline{1-2}\cline{4-11}
+\cite{pipentt} & Virtex-7 & & 2151/1475/9/2.5 & 3801 & 2104 & 232 & 4.5 & 3186 & 9680 & 17105 \\
+\hline
+\cite{pipe-17}\(^{d}\) & Artix-7 & \multirow{2}{*}{256, 12} & 2543/792/4/9 & 5643 & 232 & 182 & 1.3 & 2363 & 3306 & 7336 \\
+\cline{1-2}\cline{4-11}
+\cite{pipentt} & Virtex-7 & & 1362/1036/7/0.5 & 2212 & 556 & 235 & 1.2 & 2560 & 1634 & 2654 \\
+\hline
+\cite{pipe-5} & Virtex-7 & \multirow{2}{*}{256, 16} & 7400/5000/24/24 & 17000 & 160 & 147 & 1.1 & 3724 & 8140 & 18700 \\
+\cline{1-2}\cline{4-11}
+\cite{pipentt} & Virtex-7 & & 2294/1645/7/3 & 3894 & 556 & 228 & 1.2 & 3413 & 2753 & 4673 \\
+\hline
+\cite{pipe-5} & Virtex-7 & \multirow{2}{*}{512, 16} & 8100/5200/24/24 & 17700 & 345 & 141 & 2.4 & 3413 & 19440 & 42480 \\
+\cline{1-2}\cline{4-11}
+\cite{pipentt} & Virtex-7 & & 2482/1876/8/4 & 4482 & 1074 & 227 & 2.5 & 3277 & 6205 & 11205 \\
+\hline
+\cite{pipe-18} & UltraScale+ & \multirow{2}{*}{1024, 16} & 3140/3007/58/29 & 17640 & 6212 & 183 & 33.9 & 483 & 106446 & 597996 \\
+\cline{1-2}\cline{4-11}
+\cite{pipentt} & Virtex-7 & & 2234/1624/9/3 & 4025 & 2104 & 230 & 4.5 & 3640 & 10013 & 18113 \\
+\hline
+\cite{pipe-5} & Virtex-7 & \multirow{3}{*}{1024, 28} & 132K/59K/448/96 & 205.6K & 250 & 125 & 2.0 & 14336 & 118K & 411.2K \\
+\cline{1-2}\cline{4-11}
+\cite{pipe-5} & Virtex-7 & & 16K/14K/56/24 & 28.8K & 490 & 125 & 3.9 & 7352 & 62K & 112.3K \\
+\cline{1-2}\cline{4-11}
+\cite{pipentt} & Virtex-7 & & 3.4K/3.1K/63/6 & 11.5K & 2114 & 175 & 6.0 & 4779 & 20.4K & 69K \\
+\hline
+\cite{pipe-5} & Virtex-7 & \multirow{5}{*}{4096, 60} & 338K/138K/1984/768 & 767.8K & 972 & 125 & 7.0 & 35109 & 2366K & 5375K \\
+\cline{1-2}\cline{4-11}
+\cite{pipe-5} & Virtex-7 & & 22K/17K/248/96 & 75.6K & 3276 & 125 & 26.0 & 9452 & 572K & 1966K \\
+\cline{1-2}\cline{4-11}
+\cite{pipentt} & Virtex-7 & & 17K/11K/286/24.5 & 52.9K & 8284 & 150 & 27.5 & 8937 & 467.5K & 1455K \\
+\cline{1-2}\cline{4-11}
+\textbf{This} & \textbf{Artix-7} & & \textbf{11214/7037/248/92} & \textbf{63.6K} & \textbf{3193} & \textbf{64.5} & \textbf{49.5} & \textbf{4966} & \textbf{555K} & \textbf{3148K} \\
+\cline{1-2}\cline{4-11}
+\textbf{This} & \textbf{UltraScale+} & & \textbf{10690/6492/184/92} & \textbf{56.7K} & \textbf{3193} & \textbf{181.8} & \textbf{17.6} & \textbf{13994} & \textbf{188K} & \textbf{996K} \\
+\hline
+\end{tabular}%
+}
+\vspace{2pt}
+\begin{minipage}{0.96\textwidth}
+\scriptsize
+\(^a\) Area is measured by \(\#\mathrm{LUTs}+100\times\#\mathrm{DSPs}+300\times\#\mathrm{BRAMs}\).
+\(^b\) Average latency is measured by running 100 NTT operations.
+\(^c\) Throughput is the number of processing bits per second.
+\(^d\) Modular reduction is optimized for a specific parameter \(q\) without DSPs.
+\end{minipage}
+\end{table}
+
 \subsection{Full Polynomial Multiplication Cycle Breakdown}
 
 The complete polynomial multiplication datapath performs more work than a
@@ -1880,14 +1681,14 @@ estimate for the $N=4096$ serial pointwise-multiplication configuration.
 
 \begin{table}[H]
 \centering
-\small
-\setlength{\tabcolsep}{4pt}
-\renewcommand{\arraystretch}{0.95}
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{0.9}
 \caption{Cycle breakdown of the current full polynomial multiplication flow}
 \label{tab:cycle-breakdown}
 \begin{tabularx}{\textwidth}{|c|c|Y|}
 \hline
-\textbf{Stage} & \textbf{Approx. cycles} & \textbf{Reason} \\
+\textbf{Stage} & \textbf{\# of cycles} & \textbf{Reason} \\
 \hline
 LOAD\_A & 4098 & One coefficient per cycle is loaded into the forward NTT input memory \\
 \hline
@@ -1914,33 +1715,83 @@ Total & 38275 & Complete top-level operation after start \\
 
 The breakdown shows that the main bottleneck is not the butterfly datapath. Data moving stages account for about 20,490 cycles. This is more than half of the full polynomial multiplication latency. The reason is that the current top-level wrapper transfers complete polynomials through scalar load and read ports. The internal NTT engine processes several butterflies in parallel, but the top-level data movement between the forward NTT, pointwise multiplication storage, and inverse NTT is still serialized at one coefficient per cycle.
 
-\subsection{Architectural Interpretation}
+\subsection{Evaluation Against Project Objectives}
 
-The comparison with Liu et al. helps identify the main architectural difference.
-Their design focuses heavily on conflict-free memory access, configurable PE
-scaling, and avoiding unnecessary bit-reversal or preprocessing overhead. They
-also reuse the NTT twiddle-factor organization for INTT through a reverse-order
-and negation relationship. This reduces both memory pressure and control
-overhead in their NTT/INTT datapath.
+\begin{table}[H]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.05}
+\caption{Evaluation of functional requirements from the interim report}
+\label{tab:functional-requirements-eval}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.34\textwidth}|>{\centering\arraybackslash}p{0.1\textwidth}|>{\raggedright\arraybackslash}X|}
+\hline
+Interim functional requirement & Status & Final evaluation \\
+\hline
+The system shall implement a compliant RV32IMA core capable of executing basic RISC-V programs. & Partially met & A custom RISC-V core was implemented and used to study instruction execution and accelerator attachment. The final integration direction moved to RocketChip rather than continuing the hand-written core as the main target. \\
+\hline
+The system shall support standard RISC-V toolchains such as GCC or LLVM for compiling and running test programs. & Met through integration path & The project used a RISC-V software flow for test programs, and the RocketChip/Chipyard path provides the standard toolchain-compatible system direction. \\
+\hline
+The system shall provide a custom instruction interface or memory-mapped control interface to invoke NTT operations. & Met & The accelerator was connected through a processor-facing custom-instruction/RoCC-style path, with C-level tests used to exercise the invocation flow. \\
+\hline
+The system shall perform NTT and inverse NTT operations using hardware acceleration. & Met & The complete NTT-based polynomial multiplication datapath was implemented in synthesizable RTL and verified against reference models. \\
+\hline
+The system shall be easily simulated using testbenches. & Met & Arithmetic blocks, butterfly units, NTT/INTT modules, and the full polynomial multiplier were tested with Verilator and cocotb simulation and Python reference models. \\
+\hline
+The system shall support execution of NTT-accelerated programs. & Met at test level & The accelerator was exercised through C/custom-instruction mapping in simulation and through the RocketChip-oriented integration path. Full application-level benchmarking remains future work. \\
+\hline
+The system shall be implementable on a target FPGA platform. & Met with changed target & The original Tang Nano 20K assumption was not kept because the design grew toward RocketChip integration and larger NTT parameters. The practical target became Artix-7/Nexys Video, with additional UltraScale-oriented evaluation. \\
+\hline
+The system shall allow comparison of execution performance between software-only and hardware-accelerated NTT. & Met & C++ scalar, AVX2, and AVX-512 benchmarks were added and compared against FPGA cycle estimates for both 24-bit and 60-bit configurations. \\
+\hline
+\end{tabularx}
+\end{table}
 
-This project follows the same general direction in that it uses a banked
-coefficient organization and parallel butterfly execution, but it has a
-different system-level objective. The accelerator is designed as a complete
-polynomial multiplication block that can be attached to a RISC-V system. This
-means the design includes top-level input loading, transformed-polynomial
-storage, pointwise multiplication, inverse-transform loading, and output
-readback. These pieces make the accelerator useful as a standalone computation
-unit, but they also introduce overhead that is not present in a single NTT
-benchmark.
+\begin{table}[H]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.05}
+\caption{Evaluation of non-functional requirements from the interim report}
+\label{tab:nonfunctional-requirements-eval}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.34\textwidth}|>{\centering\arraybackslash}p{0.1\textwidth}|>{\raggedright\arraybackslash}X|}
+\hline
+Interim non-functional requirement & Status & Final evaluation \\
+\hline
+The system should be modular and maintainable, allowing future extensions. & Met & The RTL is split into arithmetic blocks, butterfly units, coefficient memories, twiddle memories, transform controllers, and a top-level polynomial multiplier, which made targeted replacement and analysis possible. \\
+\hline
+The system should demonstrate a performance gain of at least \(4\times\) over software-based NTT in execution time. & Met for forward NTT & The standalone forward-NTT comparison exceeds the \(4\times\) target: the 24-bit and 60-bit scalar measurements give approximately \(12.2\times\) and \(12.8\times\) speedup, respectively, when compared with the RTL forward-transform cycle estimate. The full polynomial multiplication flow still shows lower speedup because load/store and inter-stage movement overhead dominate the end-to-end latency. \\
+\hline
+The system should be resource-efficient and fit within the constraints of an entry-level FPGA. & Partially met / changed target & The final optimized 24-bit versions became much smaller than the initial RTL, but the complete RocketChip-plus-accelerator direction is not realistic for the smallest entry-level boards. The board target was shifted toward Artix-7/Nexys Video-class capacity. \\
+\hline
+The design should prioritize clarity and simplicity to ease verification and testing. & Met & The design deliberately keeps module boundaries visible. This is not always latency-optimal, but it made simulation, synthesis debugging, and later BRAM/SRAM replacement clearer. \\
+\hline
+The system should follow open-source standards and be compatible with SystemVerilog toolchains. & Met & The accelerator is written in Verilog/SystemVerilog, tested with open simulation flows, and connected to open RISC-V/RocketChip-oriented infrastructure. Vendor FPGA tools were used for final timing and resource measurements. \\
+\hline
+The system should investigate many different novel approaches. & Met & The project investigated direct and banked memories, constant-geometry indexing, precomputed versus generated twiddles, Barrett-oriented modular multiplication, different \(N\), width, and \(P\) values, FPGA and ASIC-oriented memory mappings, and RocketChip integration. \\
+\hline
+\end{tabularx}
+\end{table}
 
-The project has two different levels of success. At the NTT-core
-level, the cycle count is close to the PE=8 literature result. At the complete
-polynomial-multiplication level, the current implementation still has large
-memory-movement overhead. This suggests that the next optimization step should
-not only be increasing the number of multipliers. The more important improvement
-is to make inter-stage data movement banked and parallel, so that transformed
-coefficients can move from the forward NTT to pointwise multiplication and then
-to the inverse NTT at a rate closer to the internal butterfly parallelism.
+
+\subsection{Core Latency Versus Full-System Latency}
+
+The evaluation shows two different views of the accelerator. At the
+transform-core level, the banked constant-geometry NTT engine is close to the
+selected PE=8 literature baseline in cycle count. This indicates that the
+internal butterfly schedule, twiddle access, and coefficient-bank organization
+are reasonable for the chosen degree of parallelism. However, this comparison is
+only valid at the single-transform level; Liu et al. report NTT/INTT
+accelerator measurements, whereas this project also implements the complete
+polynomial multiplication sequence around the transform core.
+
+At the full-accelerator level, the limiting factor is the movement of complete
+polynomial vectors between the forward transform, intermediate storage,
+pointwise multiplication, inverse transform, and readback path. This explains
+why increasing butterfly parallelism alone does not translate directly into
+end-to-end speedup. The next architectural step is to make these inter-stage
+paths banked, wider, or streaming so that data movement approaches the
+throughput of the internal NTT engine.
 
 \newpage
 \section{Conclusion and Future Work}
@@ -1970,7 +1821,7 @@ The accelerator should be configured to support 1024-, 2048-, and 4096-point NTT
 \hline
 The system should operate at a minimum of 25 MHz on a Tang Nano 20K FPGA with the complete core, pipelining, and NTT unit. & Changed target & The Tang Nano 20K target was dropped because the project moved toward RocketChip integration and larger FPGA targets. The reported FPGA work instead focuses on Artix-7/Nexys Video-class and UltraScale-oriented results, with operating points above 25 MHz. \\
 \hline
-The hardware design should fit within 20,000 LUTs. & Met & The optimized 24-bit \(N=4096\), \(P=8\) versions reached approximately 8k LUTs and 60-bit \(P=8\) version is also in this limits. Some early and wider configurations exceeded this target, and the final 60-bit \(P=16\) UltraScale result is larger. \\
+The hardware design should fit within 20,000 LUTs. & Met & The optimized 24-bit \(N=4096\), \(P=8\) versions reached approximately 8k LUTs and 60-bit \(P=8\) version is also within this limits. Some early and wider configurations exceeded this target, and the final 60-bit \(P=16\) UltraScale result is larger. \\
 \hline
 \end{tabularx}
 \end{table}

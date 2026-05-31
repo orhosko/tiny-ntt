@@ -230,188 +230,101 @@ Hızlandırıcı, simülasyon tabanlı testler ve Python referans modelleri kull
 
 \section{Introduction and Project Summary}
 
-Polynomial arithmetic over finite rings is a central operation in several modern cryptographic systems, especially lattice-based post-quantum cryptography, Ring-LWE-based schemes, module-lattice schemes such as Kyber and Dilithium, and Fully Homomorphic Encryption (FHE) constructions \cite{kyber, rns-fhe}. These systems frequently require multiplication of large polynomials under modular arithmetic, and this operation dominates execution time when implemented directly on a general-purpose processor. For example, polynomial multiplication has been reported to occupy 78\% of the computation time in Kyber \cite{kyber-78}. As parameter sizes grow to meet security requirements, efficient polynomial multiplication becomes not only an optimization problem but also an architectural design problem.
+Polynomial arithmetic over finite rings is a central operation in several
+modern cryptographic systems, especially lattice-based post-quantum
+cryptography, Ring-LWE-based schemes, module-lattice schemes such as Kyber and
+Dilithium, and Fully Homomorphic Encryption (FHE) constructions
+\cite{kyber, rns-fhe}. These systems repeatedly multiply large polynomials
+under modular arithmetic, and this operation can dominate execution time on a
+general-purpose processor. For example, polynomial multiplication has been
+reported to occupy 78\% of the computation time in Kyber \cite{kyber-78}. As
+parameter sizes grow, efficient polynomial multiplication becomes an
+architectural design problem rather than only a software optimization problem.
 
-The Number Theoretic Transform (NTT) is an efficient method used to reduce this cost. It can be viewed as the modular-arithmetic counterpart of the Fast Fourier Transform (FFT), and it is closely related to the convolution view of polynomial multiplication. Instead of multiplying two polynomials directly, the polynomials are first transformed into the NTT domain. In that domain, multiplication becomes a pointwise operation: each transformed coefficient of the first polynomial is multiplied only with the corresponding transformed coefficient of the second polynomial. After this step, an inverse NTT is applied to obtain the final polynomial result.
+The Number Theoretic Transform (NTT) reduces this cost by converting
+polynomial multiplication into a transform-domain operation. It can be viewed
+as the modular-arithmetic counterpart of the Fast Fourier Transform (FFT).
+Instead of multiplying two polynomials coefficient by coefficient, both inputs
+are first transformed into the NTT domain, multiplied pointwise, and then
+returned to the coefficient domain with an inverse NTT. As a small example,
+\([1,4,5] * [4,2] = [4,18,28,10]\), and the same result can be written as
+\(\operatorname{INTT}(\operatorname{NTT}([1,4,5]) \odot
+\operatorname{NTT}([4,2]))\), where \(\odot\) denotes pointwise
+multiplication. For cryptographic polynomial sizes, this changes the main
+arithmetic cost from direct \(O(N^2)\) multiplication to an
+\(O(N \log N)\) transform-based computation \cite{guide-ntt}.
 
-As a small example, consider the coefficient vectors
- \[
- A = [1, 4, 5], \qquad B = [4, 2].
- \]
- These correspond to the polynomials
- \[
- A(x) = 1 + 4x + 5x^2, \qquad B(x) = 4 + 2x.
- \]
- Direct convolution computes all pairwise coefficient products and combines terms with the same degree:
- \[
- [1, 4, 5] * [4, 2] = [4, 18, 28, 10].
- \]
- Equivalently, the same multiplication can be expressed in the transform domain:
- \[
- C =
- \operatorname{INTT}\left(
-     \operatorname{NTT}([1,4,5])
-     \odot
-     \operatorname{NTT}([4,2])
- \right),
- \]
- where \(\odot\) denotes pointwise multiplication. Both methods produce
- \[
- C = [4, 18, 28, 10],
- \]
- which corresponds to
- \[
- C(x) = 4 + 18x + 28x^2 + 10x^3.
- \]
+This project designs, implements, and evaluates a configurable hardware
+accelerator for NTT-based polynomial multiplication. The accelerator targets
+negacyclic polynomial multiplication, corresponding to negative-wrapped
+convolution (NWC) modulo \(x^N+1\), which is the convolution form used by many
+FHE and lattice-based cryptographic systems. The hardware includes the
+supporting structures required by this operation: coefficient storage,
+twiddle-factor access, butterfly arithmetic, modular multiplication, and
+control logic.
 
-For this small case, the direct method is simple. However, cryptographic polynomials contain hundreds or thousands of coefficients, and the same coefficient-combination pattern becomes expensive. Direct polynomial multiplication requires all pairwise coefficient products, so its arithmetic cost grows quadratically as \(O(N^2)\). NTT-based multiplication performs an equivalent convolution in a transformed modular domain: two forward transforms are computed, the transformed coefficients are multiplied pointwise, and an inverse transform returns the result to the coefficient domain. Since each transform can be computed in \(O(N \log N)\) time and the pointwise multiplication costs \(O(N)\), the overall multiplication cost is reduced from \(O(N^2)\) to \(O(N \log N)\) \cite{guide-ntt}.
-
-Two convolution forms are especially important when applying NTT to cryptographic polynomial rings: positive-wrapped convolution (PWC) and negative-wrapped convolution (NWC). PWC corresponds to multiplication modulo \(x^N-1\), where terms that exceed degree \(N-1\) wrap around with a positive sign. NWC corresponds to multiplication modulo \(x^N+1\), where wrapped terms return with a negative sign. Many lattice-based cryptographic schemes use negacyclic polynomial rings, so NWC support is important for directly matching their algebraic structure.
-
-The difference between these forms also determines which roots of unity and twiddle factors are needed. Twiddle factors are precomputed powers of a primitive root of unity used inside the NTT butterfly stages. In hardware, these values are read every cycle by the butterfly units, so their organization affects memory usage, read bandwidth, and timing. For a PWC-friendly modulus, an \(N\)-th root of unity is sufficient for cyclic convolution. For an NWC-friendly modulus, the modulus must support the roots required for negacyclic convolution, typically involving a primitive \(2N\)-th root of unity. Table~\ref{tab:pqc-pwc-nwc} summarizes common standardized parameter sets and whether they are suitable for PWC-NTT and NWC-NTT implementations \cite{guide-ntt}.
-
-\begin{table}[H]
-\centering
-\caption{Standardized values of \(n\) and \(q\) in selected NIST-PQC schemes}
-\label{tab:pqc-pwc-nwc}
-\begin{tabularx}{\textwidth}{|Y|c|c|c|c|}
-\hline
-Scheme & \(\boldsymbol{n}\) & \(\boldsymbol{q}\) & PWC-NTT Friendly & NWC-NTT Friendly \\
-\hline
-Dilithium & 256 & 8380417 & \(\checkmark\) & \(\checkmark\) \\
-\hline
-Falcon & 512 & 12289 & \(\checkmark\) & \(\checkmark\) \\
-\hline
-Falcon & 1024 & 12289 & \(\checkmark\) & \(\checkmark\) \\
-\hline
-Kyber Version 1 and 2 & 256 & 7681 & \(\checkmark\) & \(\checkmark\) \\
-\hline
-Kyber Version 3 & 256 & 3329 & \(\checkmark\) & \(\times\) \\
-\hline
-\end{tabularx}
-\end{table}
-
-The purpose of this project is to design, implement, and evaluate a configurable hardware accelerator for NTT-based polynomial multiplication. The accelerator targets negacyclic polynomial multiplication, corresponding to negative-wrapped convolution (NWC) modulo \(x^N+1\), which is the convolution form used by FHE schemes. The design focuses not only on the NTT datapath itself, but also on the supporting hardware structures required for NWC execution, including twiddle-factor storage, modular butterfly arithmetic, coefficient memories, and pointwise multiplication in the transform domain. The project started with the development of a working RISC-V processor core, which provided the initial basis for understanding custom hardware integration. After this stage, the integration direction moved toward RocketChip, since RocketChip is a generator-based RISC-V ecosystem and better matches the configurable nature of the accelerator explored in this project.
-
-At the architectural level, the intended system can be viewed as two main
-components. The first component is a baseline RV32IMA RISC-V processor core
-capable of running regular C and assembly test programs through standard
-RISC-V software flows. The second component is a tightly coupled NTT hardware
-extension for transform-domain polynomial multiplication. This two-part view guided the
-early custom-core work and later carried over to the RocketChip/RoCC integration
-path.
+At the architectural level, the system has two main components. The first is a
+baseline RV32IMA RISC-V processor path, initially developed to understand
+instruction execution and custom hardware attachment. The second is a tightly
+coupled NTT hardware extension for transform-domain polynomial multiplication.
+The early custom-core work later evolved into a RocketChip/Chipyard integration
+path, where the existing Verilog/SystemVerilog accelerator is connected through
+a Chisel BlackBox and the Rocket Custom Coprocessor (RoCC) interface
+\cite{chipyard}.
 
 \subsection{Project Objective}
 
-The main objective is to accelerate polynomial multiplication by moving the most computationally intensive parts of the algorithm from software into dedicated hardware. Rather than implementing only one fixed accelerator instance, the project keeps the transform size, coefficient width, memory organization, and butterfly parallelism adjustable. For modular multiplication, the main hardware-oriented implementation uses Barrett reduction. The design also explores memory and twiddle-factor organization strategies, such as coefficient-bank-based execution and alternatives that reduce or reorganize stored twiddle data. This makes the project useful not only as a single accelerator implementation, but also as a framework for comparing architectural choices under the same functional target.
+The main objective is to accelerate polynomial multiplication by moving the
+most computationally intensive parts of the algorithm from software into
+dedicated hardware. Rather than implementing only one fixed accelerator
+instance, the design keeps transform size, coefficient width, memory
+organization, and butterfly parallelism adjustable. Barrett reduction is used
+as the main hardware-oriented modular multiplication path, while memory and
+twiddle-factor organization are treated as explicit architectural choices.
 
-Another objective is to connect the accelerator work to a processor system rather than treating it only as an isolated RTL block. For this reason, the project first implemented a working custom RISC-V core to study instruction execution, memory access, and the basic control path required for attaching a custom computation unit. After this stage, the integration target moved toward RocketChip. The earlier core provided the architectural background, while RocketChip provides a more practical generator-based RISC-V platform for connecting the Verilog NTT accelerator through a Chisel BlackBox and the RoCC coprocessor interface in the Chipyard ecosystem \cite{chipyard}.
-
-The project also evaluates the design across hardware implementation flows. On
-the FPGA side, the RTL is synthesized and examined with respect to timing,
-resource usage, memory mapping, and DSP utilization. In parallel, the project
-uses ASIC-oriented physical design flow to check whether the accelerator can
-progress beyond RTL and FPGA synthesis toward layout generation. This dual focus
-makes the project broader than a simulation-only RTL exercise.
-
-\subsection{Implemented System}
-
-The implemented system consists of three connected parts: an initial custom
-RISC-V processor core, a configurable RTL accelerator for NTT-based polynomial
-multiplication, and a RocketChip-oriented integration path. The custom RISC-V
-core was developed first to establish a practical understanding of instruction
-execution, control flow, memory access, and the basic requirements for attaching
-a custom hardware unit to a processor. This stage was not the final integration
-target, but it provided the architectural background needed before moving to a
-larger generator-based RISC-V system.
-
-The custom core was checked using the official RISC-V architectural test
-repository as an instruction-level reference source \cite{riscv-tests}. These
-tests provide a standard way to check whether a RISC-V implementation behaves
-correctly for the supported instruction set. In this project, they were used to
-validate the custom-core stage before the work moved toward RocketChip-based
-integration.
-The same core was also tested with a UART memory-mapped I/O path using a
-bare-metal communication program compiled with a standard RISC-V toolchain. In
-that test, the processor behaved like a simple echo machine, which provided a
-practical check that compiled software, MMIO access, and external communication
-were working together.
-
-The main hardware block developed in the project is a synthesizable RTL accelerator for NTT-based negacyclic polynomial multiplication. The accelerator was tested with multiple parameter sets, including \(N=256\) with 24-bit modulus width, \(N=4096\) with 24-bit modulus width, and \(N=4096\) with 60-bit modulus width. The target operation corresponds to negative-wrapped convolution (NWC) modulo \(x^N+1\), which is the convolution form used by many FHE schemes.
-
-The accelerator is organized as a set of separate RTL units around transform execution, transform-domain multiplication, coefficient storage, twiddle access, butterfly arithmetic, and modular reduction. These clear module boundaries are not always the most latency-optimal organization, because they can introduce explicit movement or buffering between stages. However, they made the design easier to verify, synthesize, and analyze. They also make the implementation more portable across targets; for example, a coefficient memory implemented with FPGA BRAM can later be replaced by SRAM macros in an ASIC-oriented flow without rewriting the complete NTT datapath.
-
-After the standalone RTL accelerator was developed, the integration direction moved toward RocketChip. In this path, the Verilog/SystemVerilog accelerator is preserved as the implementation source, while a Chisel BlackBox wrapper exposes its interface to the RocketChip-generated system. The intended processor-facing connection is the Rocket Custom Coprocessor (RoCC) interface, which provides a structured way for the Rocket core to issue accelerator commands and observe completion. This keeps the verified RTL datapath separate from the processor-generation framework while still allowing the accelerator to be used inside a RISC-V-based system.
+The second objective is system integration. The accelerator is not treated only
+as an isolated RTL block; it is prepared for use from a RISC-V processor
+environment. The project therefore combines a synthesizable NTT accelerator,
+processor-facing command/control paths, FPGA-oriented implementation
+experiments, and an ASIC-oriented physical-design direction.
 
 \subsection{Verification and FPGA-Oriented Refinement}
 
-A significant part of the project was spent not only on implementing the algorithm, but also on making the design behave well as real FPGA hardware. The accelerator was verified using cocotb-based simulations and reference models created in Python. The hardware output was compared against software-computed NTT and polynomial multiplication results for simple and random test cases.
+The accelerator was verified incrementally using cocotb-based simulations,
+Python reference models, and Verilator tests for the processor-facing path.
+Arithmetic blocks, butterfly units, transform modules, and the top-level
+polynomial multiplication flow were compared against software-computed
+reference results before being evaluated as FPGA hardware. The RocketChip path
+was also checked with C tests that exercise custom instruction mappings through
+the simulated processor environment.
 
-The implementation process followed an incremental path. First, modular multiplication was implemented and tested in a simple form for correctness. An alternative reduction path was also considered early in the project, but its benefit was not clear for the earlier design versions. The Barrett-reduction path became the main hardware-oriented multiplication backend. After this arithmetic base was verified, the transform engines, top-level polynomial multiplication flow, coefficient memory organization, and pipeline control were developed step by step. This incremental approach reduced debugging complexity and made it possible to compare each hardware block against a software reference before integrating it into the full system.
-
-The processor-facing path was also tested with Verilator using C programs that exercise custom instruction mappings. In these tests, the C program issues the custom accelerator instruction through the simulated processor environment, and the Verilator model is used to observe whether the command reaches the accelerator-side control logic correctly. This test level is different from the cocotb unit tests: cocotb verifies the arithmetic and NTT blocks directly, whereas the Verilator tests check the whole processor-to-accelerator invocation path through software-visible instructions.
-
-After functional correctness was established, the design was refined according to synthesis and implementation feedback. The focus of this refinement was not only to remove warnings, but to make the RTL better match the hardware structures expected by FPGA tools. This included improving memory inference, controlling resource usage, and restructuring arithmetic so that modular multiplication can map more effectively onto DSP-based datapaths. These refinements are important because an RTL design that passes simulation may still produce poor timing or unnecessary resource usage if the hardware intent is not clear to synthesis tools.
-
-The first straightforward implementation was useful as a correctness baseline, but it did not map well to FPGA resources. In particular, arithmetic and memory access patterns that looked simple at the RTL level caused the synthesis tool to build large amounts of general LUT logic instead of using the intended DSP blocks and block memories efficiently. As a result, the early design used roughly 400 times more LUTs and increased synthesis time by at least 100 times. The later refinements addressed this by making the hardware structure more explicit and FPGA-friendly. After these changes, the resource usage and implementation behavior became much more reasonable and comparable to designs reported in the literature.
-
-\subsection{ASIC-Oriented Flow and Memory Mapping}
-
-The project also considered the difference between FPGA implementation and ASIC
-physical design. In the FPGA flow, memories and arithmetic are mapped to
-available FPGA resources such as LUTs, DSPs, and BRAMs. In an ASIC flow, the
-same RTL must instead be mapped to standard cells, SRAM macros, floorplanning,
-placement, routing, timing closure, and finally a GDSII layout. A process design
-kit (PDK) provides the technology information needed for this process, including
-design rules, standard-cell libraries, timing and power views, and physical
-layout data. The ASIC-oriented experiments in this project used the Sky130 open
-PDK direction through OpenLane/OpenROAD-style flows \cite{openlane}.
-
-Memory mapping is one of the main practical differences between the two flows.
-FPGA experiments can rely on inferred or instantiated BRAMs, while an ASIC flow
-usually requires explicit SRAM macro mappings and wrappers. For this reason, the
-accelerator was kept modular around coefficient-memory boundaries: the same
-logical storage can be connected to FPGA BRAMs in FPGA experiments or replaced
-by SRAM macros in an ASIC-oriented top level. The SRAM22 project provided the
-reference path for SRAM macros and mapping support in Sky130/OpenROAD-based ASIC
-output \cite{sram22}. The SRAM22 Sky130 macros used in this direction are 1RW
-SRAMs, meaning that a single macro port performs either one read or one write in
-a cycle rather than independent simultaneous read and write operations. This is
-one reason the ASIC-oriented accelerator uses a separate top level with
-SRAM-aware state sequencing instead of directly reusing the FPGA BRAM-oriented
-top level. Chipyard is relevant for whole-system VLSI generation of
-RocketChip-based designs \cite{chipyard}, while the layout result reported in
-this project was produced by a separate LibreLane run for the NTT accelerator
-block only, using the OpenROAD/OpenLane-oriented flow direction \cite{openlane}.
+After functional correctness was established, the RTL was refined according to
+synthesis and implementation feedback. The main refinement direction was to
+make the intended hardware structure explicit: coefficient memories were
+reorganized around banked storage, twiddle access was made predictable, and the
+modular multiplication path was shaped around FPGA DSP usage. These changes are
+discussed in detail in the experimentation and evaluation chapters.
 
 \subsection{Main Results}
 
-The project produced a synthesizable and simulation-verified RTL accelerator for
-NTT-based negacyclic polynomial multiplication. The final design is not only an
-algorithmic model: it contains the arithmetic datapath, memory organization,
+The project produced a synthesizable and simulation-verified RTL accelerator
+for NTT-based negacyclic polynomial multiplication. The design contains the
+arithmetic datapath, coefficient-memory organization, twiddle-factor access,
 control logic, host-facing interface, and verification infrastructure needed to
 evaluate the accelerator as hardware.
 
 The main technical result is that the design evolved from a correctness-first
-RTL implementation into a much more hardware-conscious accelerator. The later
-versions use banked coefficient storage, constant-geometry-style indexing,
-BRAM-based twiddle access, pipelined butterfly arithmetic, and a
-Barrett-oriented modular multiplication path. These changes made the design
-substantially more suitable for FPGA implementation and also exposed the main
-remaining bottleneck: serialized movement between transform, multiplication,
-and readback stages.
+RTL implementation into a more hardware-conscious accelerator. Later versions
+use banked coefficient storage, constant-geometry-style indexing, BRAM-based
+twiddle access, pipelined butterfly arithmetic, and a Barrett-oriented modular
+multiplication path. These changes made the design more suitable for FPGA
+implementation and exposed the main remaining bottleneck: serialized movement
+between transform, multiplication, and readback stages.
 
-The project also established a processor-facing path. A custom RISC-V core was
-implemented first to study instruction execution and custom hardware attachment.
-The later integration direction moved toward RocketChip and Chipyard, where the
-Verilog/SystemVerilog accelerator can be preserved behind a Chisel BlackBox and
-connected through the RoCC interface. In addition, an ASIC-oriented top-level
-organization was prepared so that FPGA BRAM-based memories can later be
-replaced with SRAM macro mappings.
-
-At a high
-level, the results show that the internal transform engine is competitive with
-selected configurable NTT accelerator references, while the complete polynomial
+The project also established a processor-facing path through RocketChip/RoCC
+and produced an ASIC-oriented physical-design output for the accelerator block.
+At a high level, the internal transform engine is competitive with selected
+configurable NTT accelerator references, while the full polynomial
 multiplication flow still needs wider inter-stage memory movement to fully
 benefit from the available butterfly parallelism.
 \newpage
@@ -438,6 +351,41 @@ needed for negative-wrapped convolution rather than treating the NTT as a
 generic cyclic transform. The software benchmarks follow the same interpretation:
 the simple benchmark computes direct negacyclic convolution, while the NTT
 benchmark computes the same result through the transform domain.
+
+Two convolution forms are especially important when applying NTT to
+cryptographic polynomial rings: positive-wrapped convolution (PWC) and
+negative-wrapped convolution (NWC). PWC corresponds to multiplication modulo
+\(x^N-1\), where terms that exceed degree \(N-1\) wrap around with a positive
+sign. NWC corresponds to multiplication modulo \(x^N+1\), where wrapped terms
+return with a negative sign. The difference also determines which roots of
+unity and twiddle factors are needed. For a PWC-friendly modulus, an \(N\)-th
+root of unity is sufficient for cyclic convolution. For an NWC-friendly
+modulus, the modulus must support the roots required for negacyclic
+convolution, typically involving a primitive \(2N\)-th root of unity.
+Table~\ref{tab:pqc-pwc-nwc} summarizes common standardized parameter sets and
+whether they are suitable for PWC-NTT and NWC-NTT implementations
+\cite{guide-ntt}.
+
+\begin{table}[H]
+\centering
+\caption{Standardized values of \(n\) and \(q\) in selected NIST-PQC schemes}
+\label{tab:pqc-pwc-nwc}
+\begin{tabularx}{\textwidth}{|Y|c|c|c|c|}
+\hline
+Scheme & \(\boldsymbol{n}\) & \(\boldsymbol{q}\) & PWC-NTT Friendly & NWC-NTT Friendly \\
+\hline
+Dilithium & 256 & 8380417 & \(\checkmark\) & \(\checkmark\) \\
+\hline
+Falcon & 512 & 12289 & \(\checkmark\) & \(\checkmark\) \\
+\hline
+Falcon & 1024 & 12289 & \(\checkmark\) & \(\checkmark\) \\
+\hline
+Kyber Version 1 and 2 & 256 & 7681 & \(\checkmark\) & \(\checkmark\) \\
+\hline
+Kyber Version 3 & 256 & 3329 & \(\checkmark\) & \(\times\) \\
+\hline
+\end{tabularx}
+\end{table}
 
 The same conceptual review also discusses Cooley--Tukey (CT) butterflies for
 forward NTT and Gentleman--Sande (GS) butterflies for inverse NTT. These
@@ -798,6 +746,37 @@ The main configurable dimensions of the RTL are transform size, coefficient
 width, butterfly parallelism, coefficient-memory organization, twiddle storage,
 and modular-reduction backend.
 
+\subsection{ASIC-Oriented Memory Model}
+
+The project also considered the difference between FPGA implementation and ASIC
+physical design. In the FPGA flow, memories and arithmetic are mapped to
+available FPGA resources such as LUTs, DSPs, and BRAMs. In an ASIC flow, the
+same RTL must instead be mapped to standard cells, SRAM macros, floorplanning,
+placement, routing, timing closure, and finally a GDSII layout. A process
+design kit (PDK) provides the technology information needed for this process,
+including design rules, standard-cell libraries, timing and power views, and
+physical layout data. The ASIC-oriented experiments in this project used the
+Sky130 open PDK direction through OpenLane/OpenROAD-style flows
+\cite{openlane}.
+
+Memory mapping is one of the main practical differences between the two flows.
+FPGA experiments can rely on inferred or instantiated BRAMs, while an ASIC flow
+usually requires explicit SRAM macro mappings and wrappers. For this reason,
+the accelerator was kept modular around coefficient-memory boundaries: the same
+logical storage can be connected to FPGA BRAMs in FPGA experiments or replaced
+by SRAM macros in an ASIC-oriented top level. The SRAM22 project provided the
+reference path for SRAM macros and mapping support in Sky130/OpenROAD-based
+ASIC output \cite{sram22}. The SRAM22 Sky130 macros used in this direction are
+1RW SRAMs, meaning that a single macro port performs either one read or one
+write in a cycle rather than independent simultaneous read and write
+operations. This is one reason the ASIC-oriented accelerator uses a separate top
+level with SRAM-aware state sequencing instead of directly reusing the FPGA
+BRAM-oriented top level. Chipyard is relevant for whole-system VLSI generation
+of RocketChip-based designs \cite{chipyard}, while the layout result reported
+in this project was produced by a separate LibreLane run for the NTT
+accelerator block only, using the OpenROAD/OpenLane-oriented flow direction
+\cite{openlane}.
+
 \subsection{Processor and RocketChip Integration}
 
 The project also includes processor integration. Initially, a custom
@@ -1061,7 +1040,6 @@ RoCC custom instructions, loads both input polynomials, starts the accelerator,
 polls the status register until completion, and then reads the output
 coefficients back through the same processor-facing path.
 
-\newpage
 \begin{lstlisting}[language=C,caption={Chipyard/Verilator RoCC test structure for invoking the NTT accelerator},label={lst:rocc-verilator-test}]
 static inline void ntt_load_a(uint64_t addr, uint64_t data)
 {
@@ -1100,12 +1078,10 @@ for (uint32_t i = 0; i < NTT_N; i++) {
 \end{lstlisting}
 
 Finally, an ASIC-oriented physical-design run was performed for the accelerator
-block. OpenLane is an automated RTL-to-GDSII flow built around components such
-as OpenROAD and Yosys \cite{openlane}. LibreLane is a newer OpenLane-derived
-flow with a cleaner command interface, and it was used separately from the
-Chipyard whole-system flow to run only the NTT accelerator block. The run
-produced a placed-and-routed accelerator layout used as an initial
-ASIC-oriented physical-design result.
+block using LibreLane. This run was separate from the Chipyard whole-system
+flow and targeted only the NTT accelerator block. It produced a
+placed-and-routed accelerator layout used as an initial ASIC-oriented
+physical-design result.
 
 \begin{figure}[H]
 \centering
@@ -1117,9 +1093,10 @@ ASIC-oriented physical-design result.
 \subsection{Experiment Design}
 
 The experiments were organized in layers. The first layer tested the custom
-RISC-V core using instruction-level tests. This ensured that the processor work
-had a functional baseline before accelerator integration was considered. The
-second layer tested individual accelerator components, including modular
+RISC-V core using instruction-level tests from the official RISC-V architectural
+test repository \cite{riscv-tests}. This ensured that the processor work had a
+functional baseline before accelerator integration was considered. The second
+layer tested individual accelerator components, including modular
 addition, modular subtraction, modular multiplication, butterfly units, twiddle
 access, and coefficient memories. The third layer tested complete forward NTT,
 inverse NTT, and polynomial multiplication behavior against Python reference

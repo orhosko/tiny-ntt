@@ -11,12 +11,12 @@ SYNTH_SCRIPT = synth.ys
 all: synth
 
 # Synthesize the design
-# Note: Edit rtl/ntt_pointwise_mult.sv to change REDUCTION_TYPE parameter
+# Note: Edit rtl/ntt_pointwise_mult.v to change REDUCTION_TYPE parameter
 synth:
 	@echo ""
 	@echo "======================================================================"
 	@echo " Synthesizing NTT Multiplication Unit"
-	@echo " (Edit rtl/ntt_pointwise_mult.sv to change REDUCTION_TYPE)"
+	@echo " (Edit rtl/ntt_pointwise_mult.v to change REDUCTION_TYPE)"
 	@echo "======================================================================"
 	@$(YOSYS) -s $(SYNTH_SCRIPT) | tee synth.log
 

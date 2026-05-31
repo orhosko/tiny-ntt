@@ -12,12 +12,12 @@ import random
 WIDTH = 32
 Q = 8380417
 PSI = 1239911
-MULT_PIPELINE = 3
+MULT_PIPELINE = 4
 CLOCK_PERIOD_NS = 1
 
 
 async def init_dut(dut):
-    cocotb.start_soon(Clock(dut.clk, CLOCK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLOCK_PERIOD_NS, unit="ns").start())
     dut.rst_n.value = 0
     await RisingEdge(dut.clk)
     await RisingEdge(dut.clk)

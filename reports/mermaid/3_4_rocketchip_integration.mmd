@@ -1,0 +1,16 @@
+---
+config:
+  layout: elk
+---
+flowchart LR
+    CORE["Rocket Core"] --> ROCC["RoCC Interface"]
+    ROCC --> BB["Chisel BlackBox Wrapper"]
+    BB --> ACC["Verilog/SystemVerilog<br/>NTT Accelerator"]
+
+    subgraph CHIPYARD["Chipyard / RocketChip System"]
+        CORE
+        ROCC
+        BB
+    end
+
+    ACC --> MEM["Accelerator Memories<br/>BRAM / SRAM boundary"]

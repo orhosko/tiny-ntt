@@ -1,0 +1,31 @@
+stateDiagram-v2
+    direction TB
+
+    [*] --> IDLE
+    IDLE --> Forward_A: start
+
+    state Forward_A {
+        direction LR
+        LOAD_A --> RUN_A: load_index > N
+        RUN_A --> READ_A: fwd_done
+    }
+
+    Forward_A --> Forward_B: read complete
+
+    state Forward_B {
+        direction LR
+        LOAD_B --> RUN_B: load_index > N
+        RUN_B --> READ_B: fwd_done
+    }
+
+    Forward_B --> POINTWISE: read complete
+    POINTWISE --> Inverse: pointwise complete\npipeline drained
+
+    state Inverse {
+        direction LR
+        LOAD_INV --> RUN_INV: load complete
+    }
+
+    Inverse --> DONE: inv_done
+
+    DONE --> IDLE: !start

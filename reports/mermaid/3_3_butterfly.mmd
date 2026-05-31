@@ -1,0 +1,17 @@
+---
+config:
+  layout: elk
+---
+flowchart LR
+    A["a"] --> ADD["Modular Add<br/>a' = a + t mod q"]
+    A --> SUB["Modular Sub<br/>b' = a - t mod q"]
+
+    B["b"] --> MUL["Modular Multiply<br/>t = b * omega mod q"]
+    W["omega"] --> MUL
+
+    MUL --> T["t"]
+    T --> ADD
+    T --> SUB
+
+    ADD --> AP["a'"]
+    SUB --> BP["b'"]

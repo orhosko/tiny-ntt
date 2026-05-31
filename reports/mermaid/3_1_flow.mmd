@@ -1,0 +1,17 @@
+---
+config:
+  layout: elk
+---
+flowchart LR
+      A["A(x)"] --> FWD_A["Forward NTT"]
+      B["B(x)"] --> FWD_B["Forward NTT"]
+
+      FWD_A --> NA["NTT(A)"]
+      FWD_B --> NB["NTT(B)"]
+
+      NA --> PWM["Pointwise Multiplication"]
+      NB --> PWM
+
+      PWM --> NC["NTT(C)"]
+      NC --> INV["Inverse NTT"]
+      INV --> C["C(x)"]

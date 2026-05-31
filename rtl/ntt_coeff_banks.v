@@ -178,13 +178,10 @@ module ntt_coeff_banks #(
     end
   endgenerate
 
-  integer reg_bi;
-  integer bi;
-  integer li;
   always @(posedge clk) begin
     if (!rst_n) begin
       ext_rd_bank_reg <= 0;
-      for (reg_bi = 0; reg_bi < BANKS; reg_bi = reg_bi + 1) begin
+      for (integer reg_bi = 0; reg_bi < BANKS; reg_bi = reg_bi + 1) begin
         bank_wr_en_1_a[reg_bi] <= 1'b0;
         bank_wr_en_1_b[reg_bi] <= 1'b0;
         bank_wr_addr_1_a[reg_bi] <= 0;
@@ -200,7 +197,7 @@ module ntt_coeff_banks #(
       end
     end else begin
       ext_rd_bank_reg <= ext_rd_bank;
-      for (reg_bi = 0; reg_bi < BANKS; reg_bi = reg_bi + 1) begin
+      for (integer reg_bi = 0; reg_bi < BANKS; reg_bi = reg_bi + 1) begin
         bank_wr_en_1_a[reg_bi] <= bank_wr_en_1_a_next[reg_bi];
         bank_wr_en_1_b[reg_bi] <= bank_wr_en_1_b_next[reg_bi];
         bank_wr_addr_1_a[reg_bi] <= bank_wr_addr_1_a_next[reg_bi];
@@ -218,13 +215,13 @@ module ntt_coeff_banks #(
   end
 
   always @(*) begin
-    for (bi = 0; bi < BANKS; bi = bi + 1) begin
+    for (integer bi = 0; bi < BANKS; bi = bi + 1) begin
       bank_rd_addr_a[bi] = ext_rd_index;
       bank_rd_addr_b[bi] = 0;
     end
 
     if (write_enable) begin
-      for (li = 0; li < PARALLEL; li = li + 1) begin
+      for (integer li = 0; li < PARALLEL; li = li + 1) begin
         if (li < (PARALLEL / 2)) begin
           bank_rd_addr_a[li * 2]     = rd_index_a[li*BANK_DEPTH_WIDTH +: BANK_DEPTH_WIDTH];
           bank_rd_addr_a[li * 2 + 1] = rd_index_b[li*BANK_DEPTH_WIDTH +: BANK_DEPTH_WIDTH];
@@ -256,7 +253,14 @@ module ntt_coeff_banks #(
   reg [WIDTH-1:0] result_a_lane;
   reg [WIDTH-1:0] result_b_lane;
   always @(*) begin
-    for (bi = 0; bi < BANKS; bi = bi + 1) begin
+    wr_bank_a_lane = 0;
+    wr_bank_b_lane = 0;
+    wr_index_a_lane = 0;
+    wr_index_b_lane = 0;
+    result_a_lane = 0;
+    result_b_lane = 0;
+
+    for (integer bi = 0; bi < BANKS; bi = bi + 1) begin
       bank_wr_en_1_a_next[bi] = 1'b0;
       bank_wr_en_1_b_next[bi] = 1'b0;
       bank_wr_addr_1_a_next[bi] = 0;
@@ -286,7 +290,7 @@ module ntt_coeff_banks #(
         bank_wr_data_1_b_next[ext_wr_bank] = ext_write_data;
       end
     end else if (write_enable) begin
-      for (li = 0; li < PARALLEL; li = li + 1) begin
+      for (integer li = 0; li < PARALLEL; li = li + 1) begin
         if (wr_valid[li]) begin
           wr_bank_a_lane = wr_bank_a[li*BANK_ADDR_WIDTH +: BANK_ADDR_WIDTH];
           wr_bank_b_lane = wr_bank_b[li*BANK_ADDR_WIDTH +: BANK_ADDR_WIDTH];

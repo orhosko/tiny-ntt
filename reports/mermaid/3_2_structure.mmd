@@ -1,0 +1,27 @@
+---
+config:
+  layout: elk
+---
+flowchart LR
+    CTRL["Controller<br/>stage / address / load / read control"]
+
+    subgraph MEM["Memory System"]
+        BANKS["Coefficient Banks"]
+        TW["Twiddle Memory"]
+    end
+
+    subgraph DATAPATH["NTT Datapath"]
+        BF["Butterfly Array"]
+        MOD["Modular Add/Sub/Mult Units"]
+    end
+
+    CTRL --> BANKS
+    CTRL --> TW
+    CTRL --> BF
+    CTRL --> MOD
+
+    BANKS <--> BF
+    TW --> BF
+    BF --> MOD
+    MOD --> BANKS
+    MOD --> OUT["Transformed Coefficients"]

@@ -1,0 +1,30 @@
+{
+  "DESIGN_NAME": "ntt_poly_mult_asic_small",
+  "VERILOG_FILES": [
+    "dir::../rtl/bram_tdp.v",
+    "dir::../rtl/ntt_poly_mult_asic_small.sv",
+    "dir::../rtl/coeff_ram.v",
+    "dir::../rtl/ntt_forward.sv",
+    "dir::../rtl/ntt_coeff_banks.v",
+    "dir::../rtl/ntt_coeff_bank_single.v",
+    "dir::../rtl/ntt_cg_address_gen.v",
+    "dir::../rtl/twiddle_bram.v",
+    "dir::../rtl/twiddle_bram_multiport.v",
+    "dir::../rtl/ntt_bank_switch.v",
+    "dir::../rtl/ntt_control_parallel.v",
+    "dir::../rtl/ntt_inverse.sv",
+    "dir::../rtl/ntt_pointwise_mult.v",
+    "dir::../rtl/twiddle_rom.v",
+    "dir::../rtl/ntt_butterfly.v",
+    "dir::../rtl/ntt_butterfly_inverse.v",
+    "dir::../rtl/mod_mult.v",
+    "dir::../rtl/mod_add.v",
+    "dir::../rtl/mod_sub.v",
+    "dir::../rtl/barrett_reduction.v",
+    "dir::../rtl/barrett_mult.v",
+    "dir::../rtl/montgomery_reduction.v"
+  ],
+  "CLOCK_PERIOD": 25,
+  "CLOCK_PORT": "clk",
+  "USE_SLANG": true
+}

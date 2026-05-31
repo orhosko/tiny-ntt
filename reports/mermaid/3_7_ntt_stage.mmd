@@ -1,0 +1,12 @@
+---
+config:
+  layout: elk
+---
+flowchart LR
+    S["Stage s"] --> ADDR["Generate coefficient<br/>addresses i, j"]
+    ADDR --> READ["Read coefficient pair<br/>(a_i, a_j)"]
+    READ --> TW["Read stage twiddle<br/>omega_s,i"]
+    TW --> BF["Butterfly operation"]
+    BF --> SCALE["Inverse scaling by N^-1<br/>(final INTT stage)"]
+    BF --> WRITE["Write updated coefficients"]
+    SCALE --> WRITE

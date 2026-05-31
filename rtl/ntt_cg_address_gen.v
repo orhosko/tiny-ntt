@@ -56,6 +56,14 @@ module ntt_cg_address_gen #(
 
   always @(*) begin
     twiddle_shift = LOGN - stage;
+    group = 0;
+    addr0_int = 0;
+    addr1_int = 0;
+    twiddle_exp = 0;
+    addr0_lane = 0;
+    addr1_lane = 0;
+    addr0_out_lane = 0;
+    addr1_out_lane = 0;
 
     for (lane = 0; lane < PARALLEL; lane = lane + 1) begin
       butterfly_idx = butterfly_base + lane;
